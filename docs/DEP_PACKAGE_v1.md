@@ -38,7 +38,7 @@ External endpoints: Supabase Auth and Postgres, reached only through the URL abo
 
 Node in CI is `24.18.0`. The test job runs on `windows-latest` and copies the checkout to `D:\PORTFOLIO\booklet-web-app\lumio-web-app` so the existing path assertion can pass. Workflow file contains no secrets.
 
-Branch protection recommendation, not applied from here: on `main`, require the lint, test, build, and security-scan checks, disallow force-push, and do not treat the deploy job as a production gate. Leave GitHub's default branch as `main`. This feature branch is preview-only. Do not promote it.
+Branch protection recommendation, not applied from here: on `main`, require the lint, test, build, and security-scan checks, disallow force-push, and do not treat the deploy job as a production gate. This package pushes only `feat/lumio-m1-shell` and does not create `main`. GitHub will show that feature branch as the default until `main` exists. Do not point Vercel production at the default branch. Production stays `main`, which is not deployed.
 
 ## Deployment Verification Checklist
 - [ ] Open the Vercel preview URL. `GET /` returns 200. There is no `/health` route.
@@ -55,7 +55,7 @@ Branch protection recommendation, not applied from here: on `main`, require the 
 Either path is one dashboard action or one revert, under five minutes.
 
 ## Open Questions
-- Vercel CLI is not installed, and the Vercel config on this machine has no token. No preview URL was created. Owner task 0.1: connect `JT-028/lumio-web-app` in Vercel, set the production branch to `main`, allow preview deployments for other branches, and paste the six names from `.env.example`. Do not promote this branch to production.
+- Vercel CLI is not installed, and the Vercel config on this machine has no token. No preview URL was created. Owner task 0.1: connect `JT-028/lumio-web-app` in Vercel, ignore the GitHub default branch for production, set the production branch to `main` (create `main` later; do not deploy it now), allow preview deployments for `feat/lumio-m1-shell`, and paste the six names from `.env.example`. Do not promote this branch to production.
 - Creating the Supabase project, Google and email auth, and the Resend sender stays task 0.1. Do not put those secrets in git.
 - `npm audit` is a blocking stage. On 2026-10-13 it reported 3 advisories (esbuild low/moderate, postcss high via `next@15.5.27`). That job fails and deploy does not run. Do not silence it. `npm audit fix --force` would upgrade Next and is out of this package.
 - The Docker daemon was not running here, so the image was not built in this session. The Dockerfile is the definition. Port stays 3010.
