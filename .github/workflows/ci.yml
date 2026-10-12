@@ -1,0 +1,104 @@
+# Lint is `npm run typecheck`. This repo has no eslint script.
+# Deploy does not run on feature branches and does not deploy production.
+# No secrets in this file. The test job copies onto D:\PORTFOLIO\booklet-web-app\lumio-web-app
+# because test/m1-repo.test.ts asserts that path.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+
+  test:
+    name: test
+    needs: lint
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - name: Match the path the repo test expects
+        shell: pwsh
+        run: |
+          $dest = "D:\PORTFOLIO\booklet-web-app\lumio-web-app"
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          robocopy $env:GITHUB_WORKSPACE $dest /E /COPY:DAT /NFL /NDL /NJH /NJS /nc /ns /np
+          if ($LASTEXITCODE -ge 8) { exit $LASTEXITCODE }
+          exit 0
+      - name: Install
+        working-directory: D:\PORTFOLIO\booklet-web-app\lumio-web-app
+        run: npm ci
+      - name: Test
+        working-directory: D:\PORTFOLIO\booklet-web-app\lumio-web-app
+        run: npm test
+
+  build:
+    name: build
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+
+  security-scan:
+    name: security-scan
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: npm audit
+        run: npm audit
+
+  deploy:
+    name: deploy
+    needs: security-scan
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Do not deploy production
+        run: echo "Production deploy is disabled. This job does not run on feature branches and does not call Vercel."

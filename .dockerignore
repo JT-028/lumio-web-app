@@ -1,0 +1,18 @@
+# Keep the build context free of installs, build output, tests, and secrets.
+node_modules
+.next
+out
+.vercel
+.git
+.github
+coverage
+test
+test-results
+playwright-report
+docs
+supabase
+*.md
+*.tsbuildinfo
+npm-debug.log*
+.env
+.env.*
