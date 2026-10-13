@@ -105,7 +105,6 @@ html.fonts-ready .display-text {
   line-height: 1.2;
 }
 
-.lede,
 .body-copy,
 .helper,
 .greeting {
@@ -159,10 +158,7 @@ input:focus,
 }
 
 .button-primary,
-.button-quiet,
-.button-mode,
-.text-button,
-.show-password {
+.button-quiet {
   min-height: 44px;
   min-width: 44px;
   border-radius: 2px;
@@ -213,60 +209,6 @@ input:focus,
 .button-quiet:disabled {
   opacity: 1;
   cursor: not-allowed;
-}
-
-.modes {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.button-mode {
-  flex: 1;
-  padding: 0.5rem 0.75rem;
-  border: 2px solid #172b4d;
-  background: transparent;
-  color: #172b4d;
-}
-
-.button-mode[aria-pressed="true"] {
-  border-color: #172b4d;
-  background: #172b4d;
-  color: #ffffff;
-}
-
-.button-mode:hover,
-.button-mode:focus {
-  border-color: #223d66;
-}
-
-.button-mode[aria-pressed="true"]:hover,
-.button-mode[aria-pressed="true"]:focus {
-  background: #223d66;
-  color: #ffffff;
-}
-
-.show-password,
-.text-button {
-  padding: 0.5rem 0.75rem;
-  border: 2px solid transparent;
-  background: transparent;
-  color: #172b4d;
-  text-align: center;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.show-password {
-  width: 100%;
-}
-
-.text-button:hover,
-.show-password:hover,
-.text-button:focus,
-.show-password:focus {
-  background: #e7f0ea;
-  color: #223d66;
 }
 
 .divider {
@@ -382,12 +324,6 @@ legend {
   border: 0;
 }
 
-@media (min-width: 40rem) {
-  .modes {
-    flex-direction: row;
-  }
-}
-
 @media (min-width: 1280px) {
   .shell {
     display: grid;
@@ -408,7 +344,6 @@ legend {
   }
 }
 
-/* Signed-out / only. Other routes keep Fraunces and Atkinson. */
 @font-face {
   font-family: "Baloo 2";
   font-style: normal;
@@ -513,7 +448,6 @@ legend {
 
 .login-header-button,
 .login-primary,
-.login-secondary,
 .login-mode,
 .login-text,
 .login-google {
@@ -703,14 +637,12 @@ legend {
 }
 
 .login-primary:disabled,
-.login-secondary:disabled,
 .login-google:disabled,
 .login-header-button:disabled {
   opacity: 1;
   cursor: not-allowed;
 }
 
-.login-secondary,
 .login-google,
 .login-mode {
   width: 100%;
@@ -724,7 +656,6 @@ legend {
   font-weight: 500;
 }
 
-.login-secondary:hover,
 .login-google:hover,
 .login-mode:hover {
   border-color: #d9d0c4;
@@ -879,6 +810,7 @@ legend {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  order: 0;
 }
 
 .student-rail {
@@ -890,10 +822,6 @@ legend {
 .student-home .student-name,
 .student-home .rail-sign-out {
   display: none;
-}
-
-.student-top {
-  order: 0;
 }
 
 .student-status {
@@ -1172,6 +1100,11 @@ legend {
   .student-home .student-name,
   .student-home .rail-sign-out {
     display: flex;
+  }
+
+  .student-home .rail-brand {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .student-name {
