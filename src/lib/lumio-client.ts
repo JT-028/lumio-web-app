@@ -9,16 +9,19 @@ export type ProfileFailure = {
 
 export type MeResult = { ok: true; me: Me } | { ok: false; status: number };
 
-// Same branches as Theo's pathAfterSignIn. A student stays on /wait.
-// has_main_parent does not open /home: that page sends students back to /wait.
+// A named parent, or a student who already has a main parent, opens /home.
+// A student with no main parent stays on /wait. Anyone else stays on /role.
 export function pathForAccount(me: Me): "/role" | "/wait" | "/home" {
-  if (me.role === "student") {
+  if (me.role !== "parent" && me.role !== "student") {
+    return "/role";
+  }
+  if (typeof me.first_name !== "string" || me.first_name.trim() === "") {
+    return "/role";
+  }
+  if (me.role === "student" && !me.has_main_parent) {
     return "/wait";
   }
-  if (me.role === "parent") {
-    return "/home";
-  }
-  return "/role";
+  return "/home";
 }
 
 function isRole(value: unknown): value is Role {
@@ -141,6 +144,95 @@ async function readProfileError(response: Response): Promise<ProfileFailure> {
     message = "";
   }
   return { status: response.status, code, message, field };
+}
+
+const INVITE_FAILED = "The connect email could not be sent. Try again.";
+
+export async function postInvite(
+  invitedEmail: string,
+): Promise<{ ok: true; invited_email: string } | { ok: false; status: number; message: string }> {
+  let response: Response;
+  try {
+    response = await fetch("/api/invites", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        accept: "application/json",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ invited_email: invitedEmail }),
+    });
+  } catch {
+    return { ok: false, status: 0, message: INVITE_FAILED };
+  }
+  if (response.status === 401) {
+    return { ok: false, status: 401, message: "" };
+  }
+  if (response.ok) {
+    try {
+      const body: unknown = await response.json();
+      const invited = inviteEmail(body);
+      if (!invited) {
+        return { ok: false, status: response.status, message: INVITE_FAILED };
+      }
+      return { ok: true, invited_email: invited };
+    } catch {
+      return { ok: false, status: response.status, message: INVITE_FAILED };
+    }
+  }
+  return { ok: false, status: response.status, message: inviteFailure(await readErrorCode(response)) };
+}
+
+function inviteEmail(body: unknown): string | null {
+  if (!body || typeof body !== "object") {
+    return null;
+  }
+  const value = (body as { invited_email?: unknown }).invited_email;
+  if (typeof value !== "string") {
+    return null;
+  }
+  const email = value.trim();
+  if (!email || email.includes("://") || /\s/.test(email)) {
+    return null;
+  }
+  return email;
+}
+
+function inviteFailure(code: string): string {
+  if (code === "INVALID_EMAIL") {
+    return "Enter a Gmail address ending in @gmail.com or @googlemail.com.";
+  }
+  if (code === "ROLE_FORBIDDEN") {
+    return "Only a parent can send a connect email.";
+  }
+  if (code === "RATE_LIMITED") {
+    return "You have sent too many connect emails this hour. Wait and try again.";
+  }
+  if (code === "EMAIL_FAILED") {
+    return "The connect email could not be sent. Nothing was saved. Try again.";
+  }
+  if (code === "EMAIL_NOT_CONFIGURED") {
+    return "Connect email is not set up yet. Nothing was sent, and no link is shown.";
+  }
+  return INVITE_FAILED;
+}
+
+async function readErrorCode(response: Response): Promise<string> {
+  try {
+    const body: unknown = await response.json();
+    if (!body || typeof body !== "object" || !("error" in body)) {
+      return "";
+    }
+    const error = (body as { error?: unknown }).error;
+    if (!error || typeof error !== "object") {
+      return "";
+    }
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" ? code : "";
+  } catch {
+    return "";
+  }
 }
 
 export async function postSignOut(): Promise<"ok" | "gone" | "error"> {

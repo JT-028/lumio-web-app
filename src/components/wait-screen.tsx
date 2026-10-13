@@ -5,6 +5,10 @@ import { getMe, pathForAccount } from "@/lib/lumio-client";
 import { AccountGate } from "@/components/account-gate";
 import { Shell } from "@/components/shell";
 
+const heroSrc = new URL("../assets/lumi-hero.png", import.meta.url).href;
+const HERO_ALT =
+  "Lumi, a friendly owl wizard, studying a glowing storybook beside a stack of books.";
+
 export function WaitScreen() {
   return (
     <AccountGate page="wait">
@@ -55,6 +59,9 @@ function WaitForm() {
           void checkAgain();
         }}
       >
+        <figure className="wait-lumi">
+          <img src={heroSrc} alt={HERO_ALT} />
+        </figure>
         <h1 className="page-title display-text">Waiting for a parent</h1>
         <p className="body-copy">
           You can use Lumio after a parent connects you. Until then, this is the only page you can

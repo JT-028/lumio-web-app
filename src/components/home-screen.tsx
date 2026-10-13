@@ -2,13 +2,23 @@
 
 import { useEffect, useState } from "react";
 import { childGmailError } from "@/lib/form-checks";
+import { postInvite } from "@/lib/lumio-client";
 import { AccountGate } from "@/components/account-gate";
 import { Shell } from "@/components/shell";
+import { StudentHome } from "@/components/student-home";
 
 export function HomeScreen() {
   return (
     <AccountGate page="home">
-      {(me) => <HomeForm firstName={me.first_name} />}
+      {(me) =>
+        me.role === "student" ? (
+          me.has_main_parent && me.first_name?.trim() ? (
+            <StudentHome firstName={me.first_name} />
+          ) : null
+        ) : (
+          <HomeForm firstName={me.first_name} />
+        )
+      }
     </AccountGate>
   );
 }
@@ -17,6 +27,7 @@ function HomeForm({ firstName }: { firstName: string | null }) {
   const [email, setEmail] = useState("");
   const [fieldError, setFieldError] = useState("");
   const [status, setStatus] = useState("");
+  const [sending, setSending] = useState(false);
   const [focus, setFocus] = useState({ id: "", n: 0 });
   const greeting =
     firstName && firstName.trim() ? `Hello, ${firstName.trim()}.` : "Hello.";
@@ -28,7 +39,7 @@ function HomeForm({ firstName }: { firstName: string | null }) {
     document.getElementById(focus.id)?.focus();
   }, [focus]);
 
-  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const problem = childGmailError(email);
     if (problem) {
@@ -38,8 +49,23 @@ function HomeForm({ firstName }: { firstName: string | null }) {
       return;
     }
     setFieldError("");
-    // POST /api/invites is not built. Do not call it or claim a send.
-    setStatus("Connect email is not available in this milestone. Nothing was sent.");
+    setStatus("");
+    setSending(true);
+    const result = await postInvite(email.trim());
+    if (!result.ok) {
+      if (result.status === 401) {
+        setEmail("");
+        setStatus("");
+        window.location.replace("/");
+        return;
+      }
+      setSending(false);
+      setStatus(result.message);
+      return;
+    }
+    setSending(false);
+    setEmail("");
+    setStatus(`Connect email sent to ${result.invited_email}.`);
   }
 
   return (
@@ -48,7 +74,7 @@ function HomeForm({ firstName }: { firstName: string | null }) {
         <h1 className="page-title display-text">Home</h1>
         <p className="greeting">{greeting}</p>
         <p className="body-copy">No child is linked yet.</p>
-        <form className="stack" method="post" noValidate onSubmit={onSubmit}>
+        <form className="stack" method="post" noValidate aria-busy={sending} onSubmit={(event) => void onSubmit(event)}>
           <fieldset className="stack">
             <legend className="form-legend display-text">Connect a child</legend>
             <div className="field">
@@ -78,8 +104,8 @@ function HomeForm({ firstName }: { firstName: string | null }) {
                 {fieldError}
               </p>
             </div>
-            <button type="submit" className="button-primary">
-              Send connect email
+            <button type="submit" className="button-primary" disabled={sending}>
+              {sending ? "Sending\u2026" : "Send connect email"}
             </button>
             <p className="status" aria-live="polite">
               {status}

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { atkinson, atkinsonExt, fraunces, frauncesExt } from "@/lib/fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,10 +12,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-      className={`${fraunces.variable} ${frauncesExt.variable} ${atkinson.variable} ${atkinsonExt.variable}`}
-    >
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

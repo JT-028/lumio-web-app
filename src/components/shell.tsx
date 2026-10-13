@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { browserSupabase } from "@/lib/supabase/browser";
 import { postSignOut } from "@/lib/lumio-client";
 
@@ -47,24 +47,21 @@ export function Lines({ count }: { count: number }) {
   );
 }
 
-export function Shell({
-  signedIn,
-  busy = false,
-  children,
-}: {
-  signedIn: boolean;
-  busy?: boolean;
-  children: React.ReactNode;
-}) {
-  useDisplayFont();
+export function useSignOut() {
   const [signOutError, setSignOutError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
+  const busy = useRef(false);
 
   async function onSignOut() {
+    if (busy.current) {
+      return;
+    }
+    busy.current = true;
     setSigningOut(true);
     setSignOutError("");
     const result = await postSignOut();
     if (result === "error") {
+      busy.current = false;
       setSigningOut(false);
       setSignOutError("Sign-out did not finish. Try again.");
       return;
@@ -79,6 +76,21 @@ export function Shell({
     }
     window.location.replace("/");
   }
+
+  return { signOutError, signingOut, onSignOut };
+}
+
+export function Shell({
+  signedIn,
+  busy = false,
+  children,
+}: {
+  signedIn: boolean;
+  busy?: boolean;
+  children: React.ReactNode;
+}) {
+  useDisplayFont();
+  const { signOutError, signingOut, onSignOut } = useSignOut();
 
   return (
     <div className="shell">

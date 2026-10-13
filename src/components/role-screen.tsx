@@ -18,7 +18,7 @@ const EMPTY_VALIDATION = "Check your first name and your role, then try again.";
 export function RoleScreen() {
   return (
     <AccountGate page="role">
-      {(me) => (me.role === null ? <RoleForm /> : null)}
+      {(me) => (me.role === null || !me.first_name?.trim() ? <RoleForm /> : null)}
     </AccountGate>
   );
 }

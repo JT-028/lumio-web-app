@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { Role } from "@/domain/types";
+import { normalizeFirstName } from "@/domain/name";
 import { mapSignInError, mapSignUpError } from "@/lib/auth-errors";
-import { emailError } from "@/lib/form-checks";
-import { getMe, pathForAccount } from "@/lib/lumio-client";
+import { emailError, firstNameError } from "@/lib/form-checks";
+import { getMe, pathForAccount, postProfile } from "@/lib/lumio-client";
 import { browserSupabase } from "@/lib/supabase/browser";
 
 type Mode = "sign-in" | "create";
@@ -13,11 +15,14 @@ const OTHER = "Sign-in did not finish. Try again.";
 const GOOGLE = "Google sign-in did not finish. Try again.";
 const CHECK_EMAIL =
   "Check your email to confirm this address. Then come back and sign in.";
-const LUMI_ALT =
-  "Lumi, a chestnut owl in a blue wizard hat and cape with gold trim, waving hello.";
+const RESET = "Password reset is not available yet.";
+const ROLE_SAVED_STUCK =
+  "Your role was saved, but the next page did not open. Try again.";
+const ROLE_GENERIC = "Your role could not be saved. Try again.";
+const HERO_ALT =
+  "Lumi, a friendly owl wizard, studying a glowing storybook beside a stack of books.";
 
-// Whole sheet. CSS frames row 1, column 1 (x 0–413, y 0–358). Do not crop the file.
-const lumiSrc = new URL("../assets/lumio_mascot.png", import.meta.url).href;
+const heroSrc = new URL("../assets/lumi-hero.png", import.meta.url).href;
 
 export function Landing() {
   const [phase, setPhase] = useState<"checking" | "ready">("checking");
@@ -25,10 +30,16 @@ export function Landing() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [accountRole, setAccountRole] = useState<Role | "">("");
+  const [firstName, setFirstName] = useState("");
   const [shown, setShown] = useState(false);
+  // Visual only. Not sent to Supabase and not stored.
+  const [remember, setRemember] = useState(false);
   const [emailMessage, setEmailMessage] = useState("");
   const [passwordMessage, setPasswordMessage] = useState("");
   const [confirmMessage, setConfirmMessage] = useState("");
+  const [roleMessage, setRoleMessage] = useState("");
+  const [nameMessage, setNameMessage] = useState("");
   const [status, setStatus] = useState("");
   const [tone, setTone] = useState<Tone>("neutral");
   const [registered, setRegistered] = useState(false);
@@ -37,8 +48,7 @@ export function Landing() {
   const [focus, setFocus] = useState({ id: "", n: 0 });
 
   useEffect(() => {
-    document.title =
-      mode === "create" ? "Create account \u2014 Lumio" : "Sign in \u2014 Lumio";
+    document.title = mode === "create" ? "Create account \u2014 Lumio" : "Sign in \u2014 Lumio";
   }, [mode]);
 
   useEffect(() => {
@@ -89,6 +99,8 @@ export function Landing() {
     setEmailMessage("");
     setPasswordMessage("");
     setConfirmMessage("");
+    setRoleMessage("");
+    setNameMessage("");
   }
 
   function switchMode(next: Mode) {
@@ -133,6 +145,12 @@ export function Landing() {
       setTone("error");
       setStatus(GOOGLE);
     }
+  }
+
+  function onForgot() {
+    setRegistered(false);
+    setTone("neutral");
+    setStatus(RESET);
   }
 
   async function onSignIn(event: React.FormEvent<HTMLFormElement>) {
@@ -199,14 +217,34 @@ export function Landing() {
         : password.length > 0 && confirm !== password
           ? "Those passwords do not match."
           : "";
+    const nextRole = accountRole === "" ? "Choose Parent or Student." : "";
+    const nextName = firstNameError(firstName) ?? "";
     setEmailMessage(nextEmail ?? "");
     setPasswordMessage(nextPassword);
     setConfirmMessage(nextConfirm);
+    setRoleMessage(nextRole);
+    setNameMessage(nextName);
     setStatus("");
-    if (nextEmail || nextPassword || nextConfirm) {
-      moveFocus(nextEmail ? "email" : nextPassword ? "password" : "confirm");
+    if (nextEmail || nextPassword || nextConfirm || nextRole || nextName) {
+      moveFocus(
+        nextEmail
+          ? "email"
+          : nextPassword
+            ? "password"
+            : nextConfirm
+              ? "confirm"
+              : nextRole
+                ? "account-parent"
+                : "account-first-name",
+      );
       return;
     }
+    if (accountRole !== "parent" && accountRole !== "student") {
+      setRoleMessage("Choose Parent or Student.");
+      moveFocus("account-parent");
+      return;
+    }
+    const role = accountRole;
     setSubmitting(true);
     const supabase = browserSupabase();
     if (!supabase) {
@@ -251,13 +289,49 @@ export function Landing() {
       return;
     }
     if (data.session) {
-      const left = await leaveWhenSessionExists();
-      if (!left) {
+      const existing = await getMe();
+      if (!existing.ok) {
         setSubmitting(false);
         setTone("error");
         setStatus(OTHER);
         moveFocus("auth-status");
+        return;
       }
+      if (existing.me.role === "parent" || existing.me.role === "student") {
+        window.location.replace(pathForAccount(existing.me));
+        return;
+      }
+      const saved = await postProfile({
+        first_name: normalizeFirstName(firstName),
+        role,
+      });
+      if (!saved.ok) {
+        if (saved.error.status === 401) {
+          window.location.replace("/");
+          return;
+        }
+        if (saved.error.status === 409) {
+          const again = await getMe();
+          if (again.ok && (again.me.role === "parent" || again.me.role === "student")) {
+            window.location.replace(pathForAccount(again.me));
+            return;
+          }
+        }
+        setSubmitting(false);
+        setTone("error");
+        setStatus(saved.error.message.trim() || ROLE_GENERIC);
+        moveFocus("auth-status");
+        return;
+      }
+      const next = pathForAccount(saved.me);
+      if (next === "/role") {
+        setSubmitting(false);
+        setTone("error");
+        setStatus(ROLE_SAVED_STUCK);
+        moveFocus("auth-status");
+        return;
+      }
+      window.location.replace(next);
       return;
     }
     setSubmitting(false);
@@ -293,40 +367,75 @@ export function Landing() {
 
   return (
     <div className="login">
-      <div className="login-cluster">
-        <figure className="lumi">
-          <div className="lumi-frame">
-            <img src={lumiSrc} alt={LUMI_ALT} />
-          </div>
-          <figcaption className="lumi-line">
-            Hi, I&apos;m Lumi. Ready to discover something new?
-          </figcaption>
-        </figure>
-        <div className="login-card" aria-busy={phase === "checking" ? true : undefined}>
-          <div className="login-intro">
+      <header className="login-bar">
+        <div className="login-brand">
+          <div className="login-brand-row">
+            <span className="login-star" aria-hidden="true">
+              ✦
+            </span>
             <p className="wordmark">Lumio</p>
-            <p className="tagline">
-              Learn. Grow. <span className="level-up">Level Up.</span>
-            </p>
-            <h1 className="login-hero">Your little guide to big ideas.</h1>
           </div>
+          <p className="tagline">
+            Learn. Grow. <span className="level-up">Level Up.</span>
+          </p>
+        </div>
+        <div className="login-bar-actions">
+          <span className="login-new">{mode === "create" ? "Already joined?" : "New to Lumio?"}</span>
+          <button
+            type="button"
+            className="login-header-button"
+            onClick={() => switchMode(mode === "create" ? "sign-in" : "create")}
+          >
+            {mode === "create" ? "Sign in" : "Create account"}
+          </button>
+        </div>
+      </header>
+      <main className="login-main">
+        <section className="login-hero-pane" aria-labelledby="welcome-title">
+          <p className="login-kicker">
+            <span className="login-star" aria-hidden="true">
+              ✦
+            </span>
+            Your learning adventure
+          </p>
+          <h1 id="welcome-title" className="login-hero">
+            Welcome back, little explorer!
+          </h1>
+          <p className="login-lead">Your next big idea is just around the corner.</p>
+          <div className="login-art">
+            <p className="login-bubble">Ready to learn something wonderful?</p>
+            <img src={heroSrc} alt={HERO_ALT} />
+          </div>
+          <p className="login-caption">
+            <span className="login-star" aria-hidden="true">
+              ✦
+            </span>
+            Every great learner starts somewhere.
+          </p>
+        </section>
+        <section
+          className="login-card"
+          aria-labelledby={phase === "ready" ? "login-title" : undefined}
+          aria-busy={phase === "checking" || submitting ? true : undefined}
+        >
           {phase === "checking" ? (
             <p className="visually-hidden">Loading</p>
           ) : (
             <div className="stack">
-              <p className="lede">Grade 6 study for a student and a parent.</p>
-              <button
-                type="button"
-                className="login-primary"
-                onClick={() => {
-                  void onGoogle();
-                }}
-                disabled={googleWaiting || submitting}
-              >
-                {googleWaiting ? "Waiting for Google\u2026" : "Continue with Google"}
-              </button>
-              <p className="divider">or</p>
-              <div className="login-modes">
+              <div>
+                <span className="login-star" aria-hidden="true">
+                  ✦
+                </span>
+                <h2 id="login-title" className="login-card-title">
+                  {mode === "create" ? "Create account" : "Let\u2019s get learning"}
+                </h2>
+                <p className="login-card-lead">
+                  {mode === "create"
+                    ? "Choose who this account is for."
+                    : "Sign in to continue your adventure."}
+                </p>
+              </div>
+              <div className="login-modes" role="group" aria-label="Account action">
                 <button
                   type="button"
                   className="login-mode"
@@ -386,6 +495,7 @@ export function Landing() {
                     id="password"
                     type={shown ? "text" : "password"}
                     autoComplete={mode === "create" ? "new-password" : "current-password"}
+                    placeholder="Enter your password"
                     value={password}
                     aria-invalid={passwordMessage ? true : undefined}
                     aria-describedby={passwordDescribedBy || undefined}
@@ -433,11 +543,107 @@ export function Landing() {
                     </p>
                   </div>
                 ) : null}
-                <button
-                  type="submit"
-                  className="login-secondary"
-                  disabled={submitting || googleWaiting}
-                >
+                {mode === "create" ? (
+                  <fieldset aria-describedby={roleMessage ? "account-role-help account-role-error" : "account-role-help"}>
+                    <legend className="label">Who is this account for?</legend>
+                    <p id="account-role-help" className="helper">
+                      You choose once. Lumio cannot change this later.
+                    </p>
+                    <div className="choices">
+                      <div className="choice-block">
+                        <label className="choice" htmlFor="account-parent">
+                          <input
+                            id="account-parent"
+                            type="radio"
+                            name="account-role"
+                            value="parent"
+                            checked={accountRole === "parent"}
+                            aria-invalid={roleMessage ? true : undefined}
+                            aria-describedby={
+                              roleMessage ? "account-parent-desc account-role-error" : "account-parent-desc"
+                            }
+                            onChange={() => {
+                              setAccountRole("parent");
+                              setRoleMessage("");
+                            }}
+                          />
+                          <span className="choice-name">Parent</span>
+                        </label>
+                        <p id="account-parent-desc" className="helper">
+                          I will connect my child{"\u2019"}s account.
+                        </p>
+                      </div>
+                      <div className="choice-block">
+                        <label className="choice" htmlFor="account-student">
+                          <input
+                            id="account-student"
+                            type="radio"
+                            name="account-role"
+                            value="student"
+                            checked={accountRole === "student"}
+                            aria-invalid={roleMessage ? true : undefined}
+                            aria-describedby={
+                              roleMessage ? "account-student-desc account-role-error" : "account-student-desc"
+                            }
+                            onChange={() => {
+                              setAccountRole("student");
+                              setRoleMessage("");
+                            }}
+                          />
+                          <span className="choice-name">Student</span>
+                        </label>
+                        <p id="account-student-desc" className="helper">
+                          I am the Grade 6 student.
+                        </p>
+                      </div>
+                    </div>
+                    <p id="account-role-error" className="field-error">
+                      {roleMessage}
+                    </p>
+                  </fieldset>
+                ) : null}
+                {mode === "create" ? (
+                  <div className="field">
+                    <label className="label" htmlFor="account-first-name">
+                      First name
+                    </label>
+                    <input
+                      id="account-first-name"
+                      type="text"
+                      autoComplete="given-name"
+                      value={firstName}
+                      aria-invalid={nameMessage ? true : undefined}
+                      aria-describedby={nameMessage ? "account-name-help account-name-error" : "account-name-help"}
+                      onChange={(event) => {
+                        setFirstName(event.target.value);
+                        setNameMessage("");
+                      }}
+                    />
+                    <p id="account-name-help" className="helper">
+                      Up to 40 characters. Letters, spaces, hyphens, or apostrophes.
+                    </p>
+                    <p id="account-name-error" className="field-error">
+                      {nameMessage}
+                    </p>
+                  </div>
+                ) : null}
+                {mode === "sign-in" ? (
+                  <div className="login-row">
+                    <label className="remember" htmlFor="remember">
+                      <input
+                        id="remember"
+                        type="checkbox"
+                        checked={remember}
+                        onChange={(event) => setRemember(event.target.checked)}
+                      />
+                      <span>Remember me</span>
+                    </label>
+                    <button id="forgot-password" type="button" className="login-text" onClick={onForgot}>
+                      Forgot password?
+                    </button>
+                  </div>
+                ) : null}
+                <button type="submit" className="login-primary" disabled={submitting || googleWaiting}>
                   {submitting
                     ? mode === "create"
                       ? "Creating account\u2026"
@@ -472,17 +678,37 @@ export function Landing() {
                         onClick={onRegisteredSwitch}
                       >
                         Sign in instead
-                      </button>{"."}
+                      </button>
+                      .
                     </>
                   ) : (
                     status
                   )}
                 </div>
               </form>
+              <p className="divider">or continue with</p>
+              <button
+                type="button"
+                className="login-google"
+                onClick={() => {
+                  void onGoogle();
+                }}
+                disabled={googleWaiting || submitting}
+              >
+                {googleWaiting ? "Waiting for Google\u2026" : "Continue with Google"}
+              </button>
+              <p className="login-safe">Your learning journey is safe with us.</p>
             </div>
           )}
-        </div>
-      </div>
+        </section>
+      </main>
+      <footer className="login-foot">
+        Made for curious minds{" "}
+        <span className="login-star" aria-hidden="true">
+          ✦
+        </span>{" "}
+        Learn at your own pace with Lumi.
+      </footer>
     </div>
   );
 }

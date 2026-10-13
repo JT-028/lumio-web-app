@@ -10,6 +10,7 @@ import { dom, navigations, setViewport, typeInto } from "./support/dom.ts";
 type AuthCall = { name: string; args: Record<string, unknown> };
 
 const authCalls: AuthCall[] = [];
+let signUpSession = false;
 
 mock.module("@/lib/supabase/browser", {
   exports: {
@@ -25,7 +26,13 @@ mock.module("@/lib/supabase/browser", {
           },
           async signUp(args: Record<string, unknown>) {
             authCalls.push({ name: "signUp", args });
-            return { data: { user: { identities: [{}] }, session: null }, error: null };
+            return {
+              data: {
+                user: { identities: [{}] },
+                session: signUpSession ? { access_token: "session" } : null,
+              },
+              error: null,
+            };
           },
           async signInWithOAuth(args: Record<string, unknown>) {
             authCalls.push({ name: "signInWithOAuth", args });
@@ -55,8 +62,13 @@ dom.matchMedia = ((query: string) => ({
 })) as typeof dom.matchMedia;
 
 const fetches: { url: string; method: string }[] = [];
+const profilePosts: unknown[] = [];
+const invitePosts: unknown[] = [];
 let meStatus = 401;
 let meBody: Me | null = null;
+let profileBody: Me | null = null;
+let inviteStatus = 201;
+let inviteCode = "";
 
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
@@ -79,8 +91,49 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (url.endsWith("/api/sign-out") && method === "POST") {
     return new Response(null, { status: 204 });
   }
-  if (url.includes("/api/invites")) {
-    return new Response("POST /api/invites is not part of this milestone", { status: 500 });
+  if (url.endsWith("/api/profile") && method === "POST") {
+    profilePosts.push(init?.body ? JSON.parse(String(init.body)) : null);
+    if (!profileBody) {
+      return new Response(
+        JSON.stringify({
+          error: {
+            code: "ROLE_ALREADY_SET",
+            message: "A role is already set for this account.",
+            details: null,
+          },
+        }),
+        { status: 409, headers: { "content-type": "application/json" } },
+      );
+    }
+    return new Response(JSON.stringify(profileBody), {
+      status: 201,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  if (url.endsWith("/api/invites") && method === "POST") {
+    invitePosts.push(init?.body ? JSON.parse(String(init.body)) : null);
+    if (inviteStatus === 201) {
+      return new Response(
+        JSON.stringify({
+          id: "00000000-0000-4000-8000-0000000000d1",
+          invited_email: "child@gmail.com",
+          expires_at: "2026-10-20T00:00:00.000Z",
+          state: "sent",
+          token: "raw-token-should-not-render",
+        }),
+        { status: 201, headers: { "content-type": "application/json" } },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        error: {
+          code: inviteCode,
+          message: "https://secret.example/connect/raw-token-should-not-render",
+          details: null,
+        },
+      }),
+      { status: inviteStatus, headers: { "content-type": "application/json" } },
+    );
   }
   throw new Error(`unexpected fetch ${method} ${url}`);
 }) as typeof fetch;
@@ -145,11 +198,36 @@ beforeEach(() => {
   navigations.length = 0;
   authCalls.length = 0;
   fetches.length = 0;
+  profilePosts.length = 0;
+  invitePosts.length = 0;
   meStatus = 401;
   meBody = null;
+  profileBody = null;
+  inviteStatus = 201;
+  inviteCode = "";
+  signUpSession = false;
   document.documentElement.classList.remove("fonts-ready");
   setViewport(320);
 });
+
+async function openCreate(): Promise<void> {
+  const create = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent === "Create account" && button.getAttribute("aria-pressed") !== null,
+  );
+  assert.ok(create);
+  await act(async () => {
+    create.dispatchEvent(new dom.MouseEvent("click", { bubbles: true }));
+  });
+}
+
+async function chooseStudent(name: string): Promise<void> {
+  const input = document.getElementById("account-student") as HTMLInputElement;
+  assert.ok(input);
+  await act(async () => {
+    input.click();
+  });
+  await typeInto(document.getElementById("account-first-name") as HTMLInputElement, name);
+}
 
 test("the tagline is not hidden at 320px or 1280px, and reduced motion shows the wordmark", () => {
   const css = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
@@ -177,23 +255,26 @@ test("the signed-out page and the signed-in shell show Lumio and the tagline at 
     await render(<Landing />);
     assertTagline();
     assert.match(pageText(), /Continue with Google/);
-    assert.match(pageText(), /Your little guide to big ideas\./);
-    assert.match(pageText(), /Grade 6 study for a student and a parent\./);
-    assert.match(pageText(), /Hi, I'm Lumi\. Ready to discover something new\?/);
-    assert.doesNotMatch(pageText(), /Sign out|Forgot password/i);
-    const lumi = document.querySelector("img");
+    assert.match(pageText(), /Welcome back, little explorer!/);
+    assert.match(pageText(), /Your next big idea is just around the corner\./);
+    assert.match(pageText(), /Forgot password\?/);
+    assert.match(pageText(), /Remember me/);
+    assert.doesNotMatch(pageText(), /Sign out/);
+    assert.doesNotMatch(pageText(), /Password reset is not available yet/);
+    const lumi = document.querySelector(".login-art img");
     assert.ok(lumi);
     assert.equal(
       lumi.getAttribute("alt"),
-      "Lumi, a chestnut owl in a blue wizard hat and cape with gold trim, waving hello.",
+      "Lumi, a friendly owl wizard, studying a glowing storybook beside a stack of books.",
     );
-    assert.match(lumi.getAttribute("src") ?? "", /lumio_mascot\.png/);
-    const frame = document.querySelector(".lumi-frame");
-    assert.ok(frame);
-    assert.equal(getComputedStyle(frame).height, width === 1280 ? "220px" : "112px");
+    assert.match(lumi.getAttribute("src") ?? "", /lumi-hero\.png/);
+    assert.doesNotMatch(lumi.getAttribute("src") ?? "", /lumio_mascot\.png/);
     const hero = document.querySelector(".login-hero");
     assert.ok(hero);
     assert.equal(getComputedStyle(hero).fontSize, width === 1280 ? "44px" : "36px");
+    const cluster = document.querySelector(".login-main");
+    assert.ok(cluster);
+    assert.equal(getComputedStyle(cluster).flexDirection, width === 1280 ? "row" : "column");
     const tagline = document.querySelector(".tagline");
     assert.ok(tagline);
     assert.notEqual(getComputedStyle(tagline).display, "none");
@@ -213,7 +294,7 @@ test("the signed-out page and the signed-in shell show Lumio and the tagline at 
   }
 });
 
-test("signed-in M1 pages do not render an owl image or a sprite frame", async () => {
+test("role and the parent home do not render an owl, and wait is not the dashboard", async () => {
   const { RoleScreen } = await import("../src/components/role-screen.tsx");
   const { WaitScreen } = await import("../src/components/wait-screen.tsx");
   const { HomeScreen } = await import("../src/components/home-screen.tsx");
@@ -227,7 +308,12 @@ test("signed-in M1 pages do not render an owl image or a sprite frame", async ()
   meBody = student;
   await render(<WaitScreen />);
   assert.match(pageText(), /Waiting for a parent/);
-  assertNoMascot();
+  assert.match(pageText(), /You can use Lumio after a parent connects you/);
+  assert.doesNotMatch(pageText(), /Continue learning|Study sections|No study time yet|Flashcards/);
+  const waitImage = document.querySelector("img");
+  assert.ok(waitImage);
+  assert.match(waitImage.getAttribute("src") ?? "", /lumi-hero\.png/);
+  assert.doesNotMatch(document.body.innerHTML, /sprite/i);
 
   meBody = parent;
   await render(<HomeScreen />);
@@ -238,6 +324,11 @@ test("signed-in M1 pages do not render an owl image or a sprite frame", async ()
 test("email sign-in goes through the Supabase browser client and a wrong password is refused", async () => {
   const { Landing } = await import("../src/components/landing.tsx");
   await render(<Landing />);
+  const remember = document.getElementById("remember") as HTMLInputElement;
+  assert.ok(remember);
+  await act(async () => {
+    remember.click();
+  });
   await typeInto(document.getElementById("email") as HTMLInputElement, "ada@example.com");
   await typeInto(document.getElementById("password") as HTMLInputElement, "wrong-password");
   const form = document.querySelector("form");
@@ -252,19 +343,16 @@ test("email sign-in goes through the Supabase browser client and a wrong passwor
   assert.match(pageText(), /That email and password do not match\. Try again\./);
   assert.equal((document.getElementById("password") as HTMLInputElement).value, "");
   assert.equal((document.getElementById("email") as HTMLInputElement).value, "ada@example.com");
+  assert.equal(remember.checked, true);
+  assert.doesNotMatch(pageText(), /session was saved|remembered you/i);
   assert.deepEqual(navigations, []);
 });
 
 test("email sign-up goes through the Supabase browser client and stays on the page", async () => {
   const { Landing } = await import("../src/components/landing.tsx");
   await render(<Landing />);
-  const create = [...document.querySelectorAll("button")].find(
-    (button) => button.textContent === "Create account" && button.getAttribute("aria-pressed") !== null,
-  );
-  assert.ok(create);
-  await act(async () => {
-    create.dispatchEvent(new dom.MouseEvent("click", { bubbles: true }));
-  });
+  await openCreate();
+  await chooseStudent("Lin");
   await typeInto(document.getElementById("email") as HTMLInputElement, "ada@example.com");
   await typeInto(document.getElementById("password") as HTMLInputElement, "correct-horse");
   await typeInto(document.getElementById("confirm") as HTMLInputElement, "correct-horse");
@@ -279,10 +367,77 @@ test("email sign-up goes through the Supabase browser client and stays on the pa
   assert.equal(authCalls[0]?.name, "signUp");
   assert.equal(authCalls[0]?.args.email, "ada@example.com");
   assert.equal(authCalls[0]?.args.password, "correct-horse");
-  const options = authCalls[0]?.args.options as { emailRedirectTo?: string };
+  const options = authCalls[0]?.args.options as { emailRedirectTo?: string; data?: unknown };
   assert.equal(options.emailRedirectTo, "http://localhost:3010/auth/callback");
+  assert.equal(options.data, undefined);
+  assert.equal(Object.hasOwn(authCalls[0]?.args ?? {}, "role"), false);
+  assert.equal(profilePosts.length, 0);
+  assert.doesNotMatch(pageText(), /\bteacher\b/i);
   assert.match(pageText(), /Check your email to confirm this address/);
   assert.deepEqual(navigations, []);
+});
+
+test("a new email session saves the chosen role once, and an existing profile is not saved again", async () => {
+  const { Landing } = await import("../src/components/landing.tsx");
+  signUpSession = true;
+  await render(<Landing />);
+  meStatus = 200;
+  meBody = noRole;
+  profileBody = { ...student, first_name: "Lin" };
+  await openCreate();
+  await chooseStudent("Lin");
+  await typeInto(document.getElementById("email") as HTMLInputElement, "lin@example.com");
+  await typeInto(document.getElementById("password") as HTMLInputElement, "correct-horse");
+  await typeInto(document.getElementById("confirm") as HTMLInputElement, "correct-horse");
+  const form = document.querySelector("form");
+  assert.ok(form);
+  await act(async () => {
+    form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  });
+  assert.deepEqual(profilePosts, [{ first_name: "Lin", role: "student" }]);
+  assert.deepEqual(navigations, ["/wait"]);
+
+  navigations.length = 0;
+  profilePosts.length = 0;
+  authCalls.length = 0;
+  meStatus = 401;
+  meBody = null;
+  profileBody = null;
+  await render(<Landing />);
+  meStatus = 200;
+  meBody = parent;
+  await openCreate();
+  await chooseStudent("Ada");
+  await typeInto(document.getElementById("email") as HTMLInputElement, "ada@example.com");
+  await typeInto(document.getElementById("password") as HTMLInputElement, "correct-horse");
+  await typeInto(document.getElementById("confirm") as HTMLInputElement, "correct-horse");
+  const again = document.querySelector("form");
+  assert.ok(again);
+  await act(async () => {
+    again.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+  });
+  assert.deepEqual(profilePosts, []);
+  assert.deepEqual(navigations, ["/home"]);
+});
+
+test("forgot password does not call a route", async () => {
+  const { Landing } = await import("../src/components/landing.tsx");
+  await render(<Landing />);
+  const before = fetches.length;
+  const forgot = document.getElementById("forgot-password");
+  assert.ok(forgot);
+  await act(async () => {
+    forgot.dispatchEvent(new dom.MouseEvent("click", { bubbles: true }));
+  });
+  assert.match(pageText(), /Password reset is not available yet\./);
+  assert.equal(authCalls.length, 0);
+  assert.equal(fetches.slice(before).length, 0);
+  assert.equal(
+    fetches.some((call) => /reset|recover|forgot/i.test(call.url)),
+    false,
+  );
 });
 
 test("passwords that differ do not call the Supabase client", async () => {
@@ -381,12 +536,101 @@ test("check again on /wait stays there and says the student is still waiting", a
   assert.match(pageText(), /Still waiting for a parent\./);
   assert.deepEqual(navigations, []);
   assert.equal(
-    fetches.some((call) => call.url.includes("/api/invites")),
+    fetches.some((call) => call.url.includes("/api/invites") || call.url.includes("/api/home")),
     false,
   );
 });
 
-test("a parent with no child sees no child list, and the connect form does not send email", async () => {
+test("check again leaves /wait when a parent is linked", async () => {
+  meStatus = 200;
+  meBody = { ...student };
+  const { WaitScreen } = await import("../src/components/wait-screen.tsx");
+  const { pathForAccount } = await import("../src/lib/lumio-client.ts");
+  await render(<WaitScreen />);
+  assert.match(pageText(), /Waiting for a parent/);
+  meBody = { ...student, has_main_parent: true };
+  const form = document.querySelector("form");
+  assert.ok(form);
+  await act(async () => {
+    form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+  assert.equal(pathForAccount({ ...student, has_main_parent: true }), "/home");
+  assert.deepEqual(navigations, ["/home"]);
+  assert.doesNotMatch(pageText(), /Continue learning|No study time yet/);
+});
+
+test("a linked student sees the home regions and not the parent form", async () => {
+  meStatus = 200;
+  meBody = { ...student, has_main_parent: true };
+  const { HomeScreen } = await import("../src/components/home-screen.tsx");
+  const { pathForAccount } = await import("../src/lib/lumio-client.ts");
+  assert.equal(pathForAccount(meBody), "/home");
+  for (const width of [320, 1280]) {
+    setViewport(width);
+    await render(<HomeScreen />);
+    assert.match(pageText(), /Hello, Lin\./);
+    assert.match(pageText(), /Hi, I'm Lumi\. Ready to discover something new\?/);
+    assert.match(pageText(), /Your next guide is not on this page yet\./);
+    assert.match(pageText(), /A guide is one course and one quarter\./);
+    assert.match(pageText(), /No study time yet\./);
+    assert.match(pageText(), /Geography 6/);
+    assert.match(pageText(), /History 6/);
+    assert.match(pageText(), /Language 6/);
+    assert.match(pageText(), /Mathematics 6/);
+    assert.match(pageText(), /Quarter 1/);
+    assert.match(pageText(), /Quarter 2/);
+    assert.match(pageText(), /Flashcards/);
+    assert.match(pageText(), /Concepts/);
+    assert.match(pageText(), /Step-by-Step Solver/);
+    assert.match(pageText(), /Tutor/);
+    assert.match(pageText(), /Cheat Sheet/);
+    assert.match(pageText(), /Practice Sets/);
+    assert.match(pageText(), /Learn\. Grow\. Level Up\./);
+    assert.doesNotMatch(pageText(), /Connect a child|No child is linked yet|lin@example\.com/);
+    assert.doesNotMatch(pageText(), /\bXP\b|streak|leaderboard|Upgrade|friends/i);
+    assert.equal(document.querySelector(".section-list a, .guide-list a, .student-continue a, .student-today a"), null);
+    assert.equal(document.querySelector("[role='progressbar']"), null);
+    const anchors = [...document.querySelectorAll("a")];
+    assert.ok(anchors.length >= 1);
+    for (const anchor of anchors) {
+      assert.equal(anchor.textContent?.replace(/\s+/g, " ").trim(), "Home");
+      assert.equal(anchor.getAttribute("href"), "/home");
+      assert.equal(anchor.getAttribute("aria-current"), "page");
+    }
+    const img = document.querySelector(".lumi-frame img");
+    assert.ok(img);
+    assert.match(img.getAttribute("src") ?? "", /lumio_mascot\.png/);
+    assert.equal(
+      img.getAttribute("alt"),
+      "Lumi, a chestnut owl in a blue wizard hat and cape with gold trim, waving hello.",
+    );
+    const frame = document.querySelector(".lumi-frame");
+    assert.ok(frame);
+    assert.equal(getComputedStyle(frame).height, width === 1280 ? "220px" : "112px");
+    const hello = document.querySelector(".student-hello");
+    assert.ok(hello);
+    assert.equal(getComputedStyle(hello).fontSize, width === 1280 ? "44px" : "36px");
+    assert.equal(
+      getComputedStyle(document.querySelector(".student-top")).display,
+      width === 1280 ? "none" : "flex",
+    );
+    assert.equal(
+      getComputedStyle(document.querySelector(".student-bottom")).display,
+      width === 1280 ? "none" : "flex",
+    );
+    assert.equal(
+      getComputedStyle(document.querySelector(".rail-sign-out")).display,
+      width === 1280 ? "flex" : "none",
+    );
+    assert.equal(
+      fetches.some((call) => call.url.includes("/api/home") || call.url.includes("/api/invites")),
+      false,
+    );
+  }
+});
+
+test("a parent with no child sees no child list, and a connect send shows one line", async () => {
   meStatus = 200;
   meBody = parent;
   const { HomeScreen } = await import("../src/components/home-screen.tsx");
@@ -403,16 +647,37 @@ test("a parent with no child sees no child list, and the connect form does not s
   assert.ok(form);
   await act(async () => {
     form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await new Promise((resolve) => setTimeout(resolve, 30));
   });
   const status = form.querySelector(".status")?.textContent ?? "";
-  assert.match(status, /Nothing was sent\./);
-  assert.doesNotMatch(status, /email was sent|Connect email sent/i);
+  assert.equal(status, "Connect email sent to child@gmail.com.");
+  assert.equal((document.getElementById("child-gmail") as HTMLInputElement).value, "");
+  assert.deepEqual(invitePosts, [{ invited_email: "child@gmail.com" }]);
   assert.equal(
-    fetches.slice(before).some((call) => call.url.includes("/api/invites")),
-    false,
+    fetches.slice(before).some((call) => call.url.endsWith("/api/invites") && call.method === "POST"),
+    true,
   );
-  assert.equal(fetches.slice(before).length, 0);
+  assert.doesNotMatch(pageText(), /raw-token-should-not-render|expires_at|https?:\/\//i);
+  assert.doesNotMatch(pageText(), /00000000-0000-4000-8000-0000000000d1/);
+});
+
+test("a connect failure does not show a link", async () => {
+  meStatus = 200;
+  meBody = parent;
+  inviteStatus = 503;
+  inviteCode = "EMAIL_NOT_CONFIGURED";
+  const { HomeScreen } = await import("../src/components/home-screen.tsx");
+  await render(<HomeScreen />);
+  await typeInto(document.getElementById("child-gmail") as HTMLInputElement, "child@gmail.com");
+  const form = document.querySelector("form");
+  assert.ok(form);
+  await act(async () => {
+    form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+  const status = form.querySelector(".status")?.textContent ?? "";
+  assert.equal(status, "Connect email is not set up yet. Nothing was sent, and no link is shown.");
+  assert.doesNotMatch(pageText(), /raw-token-should-not-render|https?:\/\//i);
 });
 
 test("sign out returns to /", async () => {
