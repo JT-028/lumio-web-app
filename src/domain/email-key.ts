@@ -39,3 +39,24 @@ export function emailKey(lowercaseEmail: string): string | null {
   }
   return `${local}@gmail.com`;
 }
+
+export function parseInvitedGmail(
+  value: unknown,
+): { email: string; key: string } | null {
+  if (typeof value !== "string" || value.length > 320) {
+    return null;
+  }
+  const email = sessionEmail(value);
+  if (!email || email.length > 320 || /[\u0000-\u001f\u007f]/.test(email)) {
+    return null;
+  }
+  const domain = email.slice(email.lastIndexOf("@") + 1);
+  if (!GMAIL_DOMAINS.has(domain)) {
+    return null;
+  }
+  const key = emailKey(email);
+  if (!key || !key.endsWith("@gmail.com")) {
+    return null;
+  }
+  return { email, key };
+}

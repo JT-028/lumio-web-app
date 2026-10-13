@@ -1,9 +1,15 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { findProfileById } from "@/data/profiles";
 import { emailKey, sessionEmail } from "@/domain/email-key";
 import type { SessionUser } from "@/domain/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AppError } from "@/services/errors";
+
+export type ParentCaller = {
+  id: string;
+  first_name: string;
+};
 
 const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -36,4 +42,15 @@ export async function userFromClient(supabase: SupabaseClient): Promise<SessionU
     throw new AppError("VALIDATION", 400, "An email address is required.", null);
   }
   return { id: data.user.id, email };
+}
+
+export async function requireParentRole(user: SessionUser): Promise<ParentCaller> {
+  const profile = await findProfileById(user.id);
+  if (!profile || profile.role !== "parent") {
+    throw new AppError("ROLE_FORBIDDEN", 403, "Only a parent can send a connect email.", null);
+  }
+  if (!profile.first_name) {
+    throw new AppError("INTERNAL", 500, "Something went wrong.", null);
+  }
+  return { id: user.id, first_name: profile.first_name };
 }
