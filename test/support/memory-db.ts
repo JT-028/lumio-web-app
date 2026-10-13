@@ -33,6 +33,20 @@ function view(row: ProfileRow): View {
 export function createAdminClient() {
   return {
     from(table: string) {
+      if (table === "households") {
+        const empty = {
+          select() {
+            return empty;
+          },
+          eq() {
+            return empty;
+          },
+          async maybeSingle() {
+            return { data: null, error: null };
+          },
+        };
+        return empty;
+      }
       if (table !== "profiles") {
         throw new Error(`unexpected table ${table}`);
       }

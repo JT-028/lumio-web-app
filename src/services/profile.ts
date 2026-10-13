@@ -1,4 +1,5 @@
 import "server-only";
+import { hasHousehold } from "@/data/households";
 import { emailKey } from "@/domain/email-key";
 import { parseFirstName } from "@/domain/name";
 import { parseRole } from "@/domain/role";
@@ -10,9 +11,6 @@ import {
 } from "@/data/profiles";
 import { AppError } from "@/services/errors";
 
-// Households are not created in this milestone, so no student has a main parent.
-const HAS_MAIN_PARENT = false;
-
 export async function getMe(user: SessionUser): Promise<Me> {
   const profile = await findProfileById(user.id);
   if (!profile) {
@@ -21,10 +19,10 @@ export async function getMe(user: SessionUser): Promise<Me> {
       role: null,
       first_name: null,
       email: user.email,
-      has_main_parent: HAS_MAIN_PARENT,
+      has_main_parent: false,
     };
   }
-  return toMe(profile);
+  return toMe(profile, await linkedStudent(profile));
 }
 
 export async function createProfile(
@@ -70,7 +68,7 @@ export async function createProfile(
       email: user.email,
       email_key: key,
     });
-    return toMe(created);
+    return toMe(created, await linkedStudent(created));
   } catch (error) {
     if (!(error instanceof ProfileUniqueConflict)) {
       throw error;
@@ -121,12 +119,19 @@ export async function readJsonObject(request: Request): Promise<Record<string, u
   return parsed as Record<string, unknown>;
 }
 
-function toMe(profile: ProfileRecord): Me {
+async function linkedStudent(profile: ProfileRecord): Promise<boolean> {
+  if (profile.role !== "student") {
+    return false;
+  }
+  return hasHousehold(profile.id);
+}
+
+function toMe(profile: ProfileRecord, linked: boolean): Me {
   return {
     id: profile.id,
     role: profile.role,
     first_name: profile.first_name,
     email: profile.email,
-    has_main_parent: HAS_MAIN_PARENT,
+    has_main_parent: linked,
   };
 }

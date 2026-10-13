@@ -36,6 +36,18 @@ export async function findProfileById(id: string): Promise<ProfileRecord | null>
   return parseProfile(data);
 }
 
+export async function listProfilesByIds(ids: string[]): Promise<ProfileRecord[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+  const db = getDb();
+  const { data, error } = await db.from("profiles").select(PROFILE_COLUMNS).in("id", ids);
+  if (error || !Array.isArray(data)) {
+    throw new AppError("INTERNAL", 500, "Something went wrong.", null);
+  }
+  return data.map((row) => parseProfile(row));
+}
+
 export async function insertProfile(input: ProfileInsert): Promise<ProfileRecord> {
   const db = getDb();
   const { data, error } = await db
