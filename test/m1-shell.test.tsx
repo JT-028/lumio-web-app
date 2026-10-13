@@ -177,6 +177,23 @@ test("the signed-out page and the signed-in shell show Lumio and the tagline at 
     await render(<Landing />);
     assertTagline();
     assert.match(pageText(), /Continue with Google/);
+    assert.match(pageText(), /Your little guide to big ideas\./);
+    assert.match(pageText(), /Grade 6 study for a student and a parent\./);
+    assert.match(pageText(), /Hi, I'm Lumi\. Ready to discover something new\?/);
+    assert.doesNotMatch(pageText(), /Sign out|Forgot password/i);
+    const lumi = document.querySelector("img");
+    assert.ok(lumi);
+    assert.equal(
+      lumi.getAttribute("alt"),
+      "Lumi, a chestnut owl in a blue wizard hat and cape with gold trim, waving hello.",
+    );
+    assert.match(lumi.getAttribute("src") ?? "", /lumio_mascot\.png/);
+    const frame = document.querySelector(".lumi-frame");
+    assert.ok(frame);
+    assert.equal(getComputedStyle(frame).height, width === 1280 ? "220px" : "112px");
+    const hero = document.querySelector(".login-hero");
+    assert.ok(hero);
+    assert.equal(getComputedStyle(hero).fontSize, width === 1280 ? "44px" : "36px");
     const tagline = document.querySelector(".tagline");
     assert.ok(tagline);
     assert.notEqual(getComputedStyle(tagline).display, "none");
@@ -196,14 +213,10 @@ test("the signed-out page and the signed-in shell show Lumio and the tagline at 
   }
 });
 
-test("M1 pages do not render an owl image or a sprite frame", async () => {
-  const { Landing } = await import("../src/components/landing.tsx");
+test("signed-in M1 pages do not render an owl image or a sprite frame", async () => {
   const { RoleScreen } = await import("../src/components/role-screen.tsx");
   const { WaitScreen } = await import("../src/components/wait-screen.tsx");
   const { HomeScreen } = await import("../src/components/home-screen.tsx");
-
-  await render(<Landing />);
-  assertNoMascot();
 
   meStatus = 200;
   meBody = noRole;

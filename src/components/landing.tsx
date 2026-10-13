@@ -5,7 +5,6 @@ import { mapSignInError, mapSignUpError } from "@/lib/auth-errors";
 import { emailError } from "@/lib/form-checks";
 import { getMe, pathForAccount } from "@/lib/lumio-client";
 import { browserSupabase } from "@/lib/supabase/browser";
-import { Shell } from "@/components/shell";
 
 type Mode = "sign-in" | "create";
 type Tone = "error" | "success" | "neutral";
@@ -14,6 +13,11 @@ const OTHER = "Sign-in did not finish. Try again.";
 const GOOGLE = "Google sign-in did not finish. Try again.";
 const CHECK_EMAIL =
   "Check your email to confirm this address. Then come back and sign in.";
+const LUMI_ALT =
+  "Lumi, a chestnut owl in a blue wizard hat and cape with gold trim, waving hello.";
+
+// Whole sheet. CSS frames row 1, column 1 (x 0–413, y 0–358). Do not crop the file.
+const lumiSrc = new URL("../assets/lumio_mascot.png", import.meta.url).href;
 
 export function Landing() {
   const [phase, setPhase] = useState<"checking" | "ready">("checking");
@@ -276,14 +280,6 @@ export function Landing() {
     moveFocus("password");
   }
 
-  if (phase === "checking") {
-    return (
-      <Shell signedIn={false} busy>
-        <p className="visually-hidden">Loading</p>
-      </Shell>
-    );
-  }
-
   const emailDescribedBy = emailMessage ? "email-error" : undefined;
   const passwordDescribedBy = [
     mode === "create" ? "password-help" : "",
@@ -292,171 +288,201 @@ export function Landing() {
     .filter(Boolean)
     .join(" ");
   const confirmDescribedBy = confirmMessage ? "confirm-error" : undefined;
+  const statusClass =
+    tone === "success" ? "status is-success" : tone === "error" ? "status is-error" : "status";
 
   return (
-    <Shell signedIn={false} busy={submitting || googleWaiting}>
-      <div className="stack">
-        <p className="lede">Grade 6 study for a student and a parent.</p>
-        <button
-          type="button"
-          className="button-primary"
-          onClick={() => {
-            void onGoogle();
-          }}
-          disabled={googleWaiting || submitting}
-        >
-          {googleWaiting ? "Waiting for Google\u2026" : "Continue with Google"}
-        </button>
-        <p className="divider">or</p>
-        <div className="modes">
-          <button
-            type="button"
-            className="button-mode"
-            aria-pressed={mode === "sign-in"}
-            onClick={() => switchMode("sign-in")}
-          >
-            Sign in
-          </button>
-          <button
-            type="button"
-            className="button-mode"
-            aria-pressed={mode === "create"}
-            onClick={() => switchMode("create")}
-          >
-            Create account
-          </button>
-        </div>
-        <form
-          className="stack"
-          method="post"
-          noValidate
-          aria-busy={submitting}
-          onSubmit={(event) => {
-            if (mode === "sign-in") {
-              void onSignIn(event);
-              return;
-            }
-            void onCreate(event);
-          }}
-        >
-          <div className="field">
-            <label className="label" htmlFor="email">
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="username"
-              placeholder="name@example.com"
-              value={email}
-              aria-invalid={emailMessage ? true : undefined}
-              aria-describedby={emailDescribedBy}
-              onChange={(event) => {
-                setEmail(event.target.value);
-                setEmailMessage("");
-              }}
-            />
-            <p id="email-error" className="field-error">
-              {emailMessage}
-            </p>
+    <div className="login">
+      <div className="login-cluster">
+        <figure className="lumi">
+          <div className="lumi-frame">
+            <img src={lumiSrc} alt={LUMI_ALT} />
           </div>
-          <div className="field">
-            <label className="label" htmlFor="password">
-              Password
-            </label>
-            <input
-              id="password"
-              type={shown ? "text" : "password"}
-              autoComplete={mode === "create" ? "new-password" : "current-password"}
-              value={password}
-              aria-invalid={passwordMessage ? true : undefined}
-              aria-describedby={passwordDescribedBy || undefined}
-              onChange={(event) => {
-                setPassword(event.target.value);
-                setPasswordMessage("");
-              }}
-            />
-            <p id="password-error" className="field-error">
-              {passwordMessage}
+          <figcaption className="lumi-line">
+            Hi, I&apos;m Lumi. Ready to discover something new?
+          </figcaption>
+        </figure>
+        <div className="login-card" aria-busy={phase === "checking" ? true : undefined}>
+          <div className="login-intro">
+            <p className="wordmark">Lumio</p>
+            <p className="tagline">
+              Learn. Grow. <span className="level-up">Level Up.</span>
             </p>
+            <h1 className="login-hero">Your little guide to big ideas.</h1>
           </div>
-          <button
-            type="button"
-            className="show-password"
-            aria-pressed={shown}
-            onClick={() => setShown((current) => !current)}
-          >
-            {shown ? "Hide password" : "Show password"}
-          </button>
-          {mode === "create" ? (
-            <>
-              <p id="password-help" className="helper">
-                Choose a password you can remember.
-              </p>
-              <div className="field">
-                <label className="label" htmlFor="confirm">
-                  Confirm password
-                </label>
-                <input
-                  id="confirm"
-                  type={shown ? "text" : "password"}
-                  autoComplete="new-password"
-                  value={confirm}
-                  aria-invalid={confirmMessage ? true : undefined}
-                  aria-describedby={confirmDescribedBy}
-                  onChange={(event) => {
-                    setConfirm(event.target.value);
-                    setConfirmMessage("");
-                  }}
-                />
-                <p id="confirm-error" className="field-error">
-                  {confirmMessage}
-                </p>
-              </div>
-            </>
-          ) : null}
-          <button type="submit" className="button-primary" disabled={submitting || googleWaiting}>
-            {mode === "create" ? "Create account" : "Sign in"}
-          </button>
-          {mode === "sign-in" ? (
-            <p className="switch-line">
-              New here?
-              <button type="button" className="text-button" onClick={() => switchMode("create")}>
-                Create an account
-              </button>
-            </p>
+          {phase === "checking" ? (
+            <p className="visually-hidden">Loading</p>
           ) : (
-            <p className="switch-line">
-              Already have an account?
-              <button type="button" className="text-button" onClick={() => switchMode("sign-in")}>
-                Sign in
+            <div className="stack">
+              <p className="lede">Grade 6 study for a student and a parent.</p>
+              <button
+                type="button"
+                className="login-primary"
+                onClick={() => {
+                  void onGoogle();
+                }}
+                disabled={googleWaiting || submitting}
+              >
+                {googleWaiting ? "Waiting for Google\u2026" : "Continue with Google"}
               </button>
-            </p>
-          )}
-          <div
-            id="auth-status"
-            tabIndex={-1}
-            className={tone === "success" ? "status is-success" : tone === "error" ? "status is-error" : "status"}
-            aria-live="polite"
-          >
-            {registered ? (
-              <>
-                That email is already registered.{" "}
+              <p className="divider">or</p>
+              <div className="login-modes">
                 <button
-                  id="sign-in-instead"
                   type="button"
-                  className="text-button"
-                  onClick={onRegisteredSwitch}
+                  className="login-mode"
+                  aria-pressed={mode === "sign-in"}
+                  onClick={() => switchMode("sign-in")}
                 >
-                  Sign in instead
+                  Sign in
                 </button>
-              </>
-            ) : (
-              status
-            )}
-          </div>
-        </form>
+                <button
+                  type="button"
+                  className="login-mode"
+                  aria-pressed={mode === "create"}
+                  onClick={() => switchMode("create")}
+                >
+                  Create account
+                </button>
+              </div>
+              <form
+                className="stack"
+                method="post"
+                noValidate
+                aria-busy={submitting}
+                onSubmit={(event) => {
+                  if (mode === "sign-in") {
+                    void onSignIn(event);
+                    return;
+                  }
+                  void onCreate(event);
+                }}
+              >
+                <div className="field">
+                  <label className="label" htmlFor="email">
+                    Email
+                  </label>
+                  <input
+                    id="email"
+                    type="email"
+                    autoComplete="username"
+                    placeholder="name@example.com"
+                    value={email}
+                    aria-invalid={emailMessage ? true : undefined}
+                    aria-describedby={emailDescribedBy}
+                    onChange={(event) => {
+                      setEmail(event.target.value);
+                      setEmailMessage("");
+                    }}
+                  />
+                  <p id="email-error" className="field-error">
+                    {emailMessage}
+                  </p>
+                </div>
+                <div className="field">
+                  <label className="label" htmlFor="password">
+                    Password
+                  </label>
+                  <input
+                    id="password"
+                    type={shown ? "text" : "password"}
+                    autoComplete={mode === "create" ? "new-password" : "current-password"}
+                    value={password}
+                    aria-invalid={passwordMessage ? true : undefined}
+                    aria-describedby={passwordDescribedBy || undefined}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setPasswordMessage("");
+                    }}
+                  />
+                  {mode === "create" ? (
+                    <p id="password-help" className="helper">
+                      Choose a password you can remember.
+                    </p>
+                  ) : null}
+                  <p id="password-error" className="field-error">
+                    {passwordMessage}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="login-text"
+                  aria-pressed={shown}
+                  onClick={() => setShown((current) => !current)}
+                >
+                  {shown ? "Hide password" : "Show password"}
+                </button>
+                {mode === "create" ? (
+                  <div className="field">
+                    <label className="label" htmlFor="confirm">
+                      Confirm password
+                    </label>
+                    <input
+                      id="confirm"
+                      type={shown ? "text" : "password"}
+                      autoComplete="new-password"
+                      value={confirm}
+                      aria-invalid={confirmMessage ? true : undefined}
+                      aria-describedby={confirmDescribedBy}
+                      onChange={(event) => {
+                        setConfirm(event.target.value);
+                        setConfirmMessage("");
+                      }}
+                    />
+                    <p id="confirm-error" className="field-error">
+                      {confirmMessage}
+                    </p>
+                  </div>
+                ) : null}
+                <button
+                  type="submit"
+                  className="login-secondary"
+                  disabled={submitting || googleWaiting}
+                >
+                  {submitting
+                    ? mode === "create"
+                      ? "Creating account\u2026"
+                      : "Signing in\u2026"
+                    : mode === "create"
+                      ? "Create account"
+                      : "Sign in"}
+                </button>
+                {mode === "sign-in" ? (
+                  <p className="switch-line">
+                    New here?
+                    <button type="button" className="login-text" onClick={() => switchMode("create")}>
+                      Create an account.
+                    </button>
+                  </p>
+                ) : (
+                  <p className="switch-line">
+                    Already have an account?
+                    <button type="button" className="login-text" onClick={() => switchMode("sign-in")}>
+                      Sign in.
+                    </button>
+                  </p>
+                )}
+                <div id="auth-status" tabIndex={-1} className={statusClass} aria-live="polite">
+                  {registered ? (
+                    <>
+                      That email is already registered.{" "}
+                      <button
+                        id="sign-in-instead"
+                        type="button"
+                        className="login-text"
+                        onClick={onRegisteredSwitch}
+                      >
+                        Sign in instead
+                      </button>{"."}
+                    </>
+                  ) : (
+                    status
+                  )}
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
       </div>
-    </Shell>
+    </div>
   );
 }
