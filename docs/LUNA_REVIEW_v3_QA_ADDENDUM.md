@@ -58,7 +58,9 @@ Reuse the exact installed gate sources and constraints recorded in the preceding
 
 ## Commit boundary and remaining limits
 
-The local QA commit is limited to the three test files, final `QUINN_REPORT_v3.md`, the three narrow independent review reports, and this addendum. No application source is included. Existing user-owned AGENTS.md, specs, inspiration/assets, and the updated untracked session handoff remain outside staging. Production files compare unchanged against `5db49003ec4b7e8d3d2e3a119cefaf7d843c4ef6` before staging. The exact QA commit hash will be recorded in a documentation-only child commit.
+The local QA commit is `1b36096f7286334237f8332c38e1d5bd7af96a27`, `test(m2): Record independent QA coverage and review`, on `feat/lumio-m1-shell`. It contains exactly the three test files, final `QUINN_REPORT_v3.md`, the three narrow independent review reports, and this addendum. The required Grok co-author footer is present. This hash record is a documentation-only child commit, whose hash is supplied in the final response.
+
+No application source is included. Existing user-owned AGENTS.md, specs, inspiration/assets, and the updated untracked session handoff remain outside staging. Production files compare unchanged against `5db49003ec4b7e8d3d2e3a119cefaf7d843c4ef6`. The commit boundary was checked against the exact eight-file allowlist, and both tracked worktree and index are clean after committing.
 
 The first staged diff check found trailing spaces in Quinn's copied coverage table. Luna removed only that report whitespace, preserving all evidence values and test contents. The staged diff check then passed. No new test or build execution was needed for this documentation cleanup.
 
