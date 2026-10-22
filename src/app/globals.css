@@ -790,6 +790,20 @@ legend {
   margin: 0;
 }
 
+.connect-screen .body-copy {
+  overflow-wrap: anywhere;
+}
+
+.connect-auth input {
+  border-radius: 12px;
+}
+
+.linked-children {
+  margin: 12px 0 0;
+  padding-left: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
 .student-home {
   min-height: 100vh;
   width: 100%;

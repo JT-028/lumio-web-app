@@ -51,7 +51,7 @@ export function setViewport(width: number): void {
 export async function typeInto(input: HTMLInputElement, value: string): Promise<void> {
   const setter = Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, "value")?.set;
   const tracked = input as HTMLInputElement & { _valueTracker?: { setValue: (next: string) => void } };
-  tracked._valueTracker?.setValue("");
+  tracked._valueTracker?.setValue(value === "" ? "previous-test-value" : "");
   await act(async () => {
     if (setter) {
       setter.call(input, value);

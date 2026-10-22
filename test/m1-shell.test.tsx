@@ -74,6 +74,14 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
   const method = init?.method ?? "GET";
   fetches.push({ url, method });
+  if (url.endsWith("/api/home")) {
+    if (meStatus !== 200 || !meBody) return new Response(null, { status: 401 });
+    if (!meBody.role) return new Response(JSON.stringify({ error: { code: "ROLE_REQUIRED" } }), { status: 403 });
+    return new Response(JSON.stringify({
+      role: meBody.role, first_name: meBody.first_name,
+      needs_parent: meBody.role === "student" && !meBody.has_main_parent, children: [],
+    }));
+  }
   if (url.endsWith("/api/me")) {
     if (meStatus !== 200 || !meBody) {
       return new Response(
@@ -536,9 +544,10 @@ test("check again on /wait stays there and says the student is still waiting", a
   assert.match(pageText(), /Still waiting for a parent\./);
   assert.deepEqual(navigations, []);
   assert.equal(
-    fetches.some((call) => call.url.includes("/api/invites") || call.url.includes("/api/home")),
+    fetches.some((call) => call.url.includes("/api/invites") || call.url.includes("/api/me")),
     false,
   );
+  assert.equal(fetches.filter((call) => call.url === "/api/home").length, 2);
 });
 
 test("check again leaves /wait when a parent is linked", async () => {

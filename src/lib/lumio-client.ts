@@ -150,7 +150,7 @@ const INVITE_FAILED = "The connect email could not be sent. Try again.";
 
 export async function postInvite(
   invitedEmail: string,
-): Promise<{ ok: true; invited_email: string } | { ok: false; status: number; message: string }> {
+): Promise<{ ok: true; invited_email: string } | { ok: false; status: number; message: string; field: "invited_email" | null }> {
   let response: Response;
   try {
     response = await fetch("/api/invites", {
@@ -164,24 +164,28 @@ export async function postInvite(
       body: JSON.stringify({ invited_email: invitedEmail }),
     });
   } catch {
-    return { ok: false, status: 0, message: INVITE_FAILED };
+    return { ok: false, status: 0, message: INVITE_FAILED, field: null };
   }
   if (response.status === 401) {
-    return { ok: false, status: 401, message: "" };
+    return { ok: false, status: 401, message: "", field: null };
   }
   if (response.ok) {
     try {
       const body: unknown = await response.json();
       const invited = inviteEmail(body);
       if (!invited) {
-        return { ok: false, status: response.status, message: INVITE_FAILED };
+        return { ok: false, status: response.status, message: INVITE_FAILED, field: null };
       }
       return { ok: true, invited_email: invited };
     } catch {
-      return { ok: false, status: response.status, message: INVITE_FAILED };
+      return { ok: false, status: response.status, message: INVITE_FAILED, field: null };
     }
   }
-  return { ok: false, status: response.status, message: inviteFailure(await readErrorCode(response)) };
+  const code = await readErrorCode(response);
+  return {
+    ok: false, status: response.status, message: inviteFailure(code),
+    field: code === "INVALID_EMAIL" ? "invited_email" : null,
+  };
 }
 
 function inviteEmail(body: unknown): string | null {

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { childGmailError } from "@/lib/form-checks";
 import { postInvite } from "@/lib/lumio-client";
 import { AccountGate } from "@/components/account-gate";
-import { Shell } from "@/components/shell";
+import { Lines, Shell } from "@/components/shell";
 import { StudentHome } from "@/components/student-home";
+import { getHome, homeRedirect, type HouseholdHome } from "@/lib/m2-client";
 
 export function HomeScreen() {
   return (
@@ -16,21 +17,55 @@ export function HomeScreen() {
             <StudentHome firstName={me.first_name} />
           ) : null
         ) : (
-          <HomeForm firstName={me.first_name} />
+          <ParentHome />
         )
       }
     </AccountGate>
   );
 }
 
-function HomeForm({ firstName }: { firstName: string | null }) {
+function ParentHome() {
+  const [home, setHome] = useState<HouseholdHome | null>(null);
+  const [phase, setPhase] = useState<"loading" | "error" | "ready" | "redirecting">("loading");
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setPhase("loading"); setHome(null);
+    void (async () => {
+      const result = await getHome();
+      if (cancelled) return;
+      const next = homeRedirect(result);
+      if (next) { setPhase("redirecting"); window.location.replace(next); return; }
+      if (!result.ok) { setPhase("error"); return; }
+      if (result.data.role !== "parent") {
+        setPhase("redirecting");
+        window.location.replace(result.data.needs_parent ? "/wait" : "/home"); return;
+      }
+      setHome(result.data); setPhase("ready");
+    })();
+    return () => { cancelled = true; };
+  }, [attempt]);
+  if (phase === "ready" && home) return <HomeForm home={home} />;
+  return <Shell signedIn busy={phase !== "error"}>
+    {phase === "error" ? <div className="stack">
+      <p className="status is-error" aria-live="polite">We could not open your home. Try again.</p>
+      <button type="button" className="button-primary" autoFocus onClick={() => setAttempt((v) => v + 1)}>Try again</button>
+    </div> : <><p className="visually-hidden">Loading</p><Lines count={4} /></>}
+  </Shell>;
+}
+
+function HomeForm({ home }: { home: HouseholdHome }) {
   const [email, setEmail] = useState("");
   const [fieldError, setFieldError] = useState("");
   const [status, setStatus] = useState("");
   const [sending, setSending] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+  const sendLock = useRef(false);
+  const generation = useRef(0);
+  useEffect(() => () => { generation.current += 1; }, []);
   const [focus, setFocus] = useState({ id: "", n: 0 });
   const greeting =
-    firstName && firstName.trim() ? `Hello, ${firstName.trim()}.` : "Hello.";
+    home.first_name.trim() ? `Hello, ${home.first_name.trim()}.` : "Hello.";
 
   useEffect(() => {
     if (!focus.id) {
@@ -41,6 +76,8 @@ function HomeForm({ firstName }: { firstName: string | null }) {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (sendLock.current) return;
+    const current = generation.current;
     const problem = childGmailError(email);
     if (problem) {
       setFieldError(problem);
@@ -51,29 +88,44 @@ function HomeForm({ firstName }: { firstName: string | null }) {
     setFieldError("");
     setStatus("");
     setSending(true);
+    sendLock.current = true;
     const result = await postInvite(email.trim());
+    if (current !== generation.current) return;
     if (!result.ok) {
       if (result.status === 401) {
         setEmail("");
         setStatus("");
+        setLeaving(true);
         window.location.replace("/");
         return;
       }
       setSending(false);
+      sendLock.current = false;
+      if (result.field === "invited_email") {
+        setFieldError(result.message);
+        setFocus((current) => ({ id: "child-gmail", n: current.n + 1 }));
+        return;
+      }
       setStatus(result.message);
       return;
     }
     setSending(false);
+    sendLock.current = false;
     setEmail("");
     setStatus(`Connect email sent to ${result.invited_email}.`);
   }
 
+  if (leaving) return <Shell signedIn busy><Lines count={4} /></Shell>;
   return (
     <Shell signedIn>
       <div className="stack">
         <h1 className="page-title display-text">Home</h1>
         <p className="greeting">{greeting}</p>
-        <p className="body-copy">No child is linked yet.</p>
+        {home.children.length === 0 ? <p className="body-copy">No child is linked yet.</p> :
+          <section aria-labelledby="linked-children-title">
+            <h2 id="linked-children-title" className="form-legend display-text">Linked children</h2>
+            <ul className="linked-children">{home.children.map((child, index) => <li key={index}>{child.first_name}</li>)}</ul>
+          </section>}
         <form className="stack" method="post" noValidate aria-busy={sending} onSubmit={(event) => void onSubmit(event)}>
           <fieldset className="stack">
             <legend className="form-legend display-text">Connect a child</legend>
@@ -84,7 +136,7 @@ function HomeForm({ firstName }: { firstName: string | null }) {
               <input
                 id="child-gmail"
                 type="email"
-                autoComplete="off"
+                autoComplete="username"
                 placeholder="name@gmail.com"
                 value={email}
                 aria-invalid={fieldError ? true : undefined}

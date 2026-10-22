@@ -73,14 +73,15 @@ export function AccountGate({
       <Shell signedIn>
         <div className="stack">
           <p className="status is-error" aria-live="polite">
-            We could not check your account. Check again.
+            {page === "home" ? "We could not open your home. Try again." : "We could not check your account. Check again."}
           </p>
           <button
             type="button"
             className="button-primary"
+            autoFocus
             onClick={() => setAttempt((current) => current + 1)}
           >
-            Check again
+            {page === "home" ? "Try again" : "Check again"}
           </button>
         </div>
       </Shell>
