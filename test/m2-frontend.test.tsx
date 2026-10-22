@@ -437,3 +437,112 @@ test("a departed parent form cannot redirect after an invite rejection resolves"
   button("Accept this link");
   assert.deepEqual(navigations, []);
 });
+
+test("parent invite repeated form submissions send once while pending and clear only after success", async () => {
+  me = parent;
+  homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [] } };
+  let release!: () => void; holdInvite = new Promise((r) => { release = r; });
+  await render(<HomeScreen />); await input("child-gmail", "child@gmail.com");
+  await submit(); await submit();
+  assert.equal(button("Sending…").disabled, true);
+  assert.equal(calls.filter((call) => call.url === "/api/invites").length, 1);
+  assert.equal((document.getElementById("child-gmail") as HTMLInputElement).value, "child@gmail.com");
+  release(); await settle();
+  assert.equal((document.getElementById("child-gmail") as HTMLInputElement).value, "");
+  assert.match(text(), /Connect email sent to child@gmail.com/);
+  assert.equal(button("Send connect email").disabled, false);
+});
+
+test("parent blank and non-Gmail errors focus the described field without sending", async () => {
+  me = parent;
+  homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [] } };
+  await render(<HomeScreen />);
+  for (const [email, message] of [["", "Enter your child’s Gmail address."], ["child@example.test", "Enter a Gmail address ending in @gmail.com or @googlemail.com."]]) {
+    await input("child-gmail", email); await submit();
+    const field = document.getElementById("child-gmail");
+    assert.equal(document.activeElement, field);
+    assert.equal(field?.getAttribute("aria-invalid"), "true");
+    assert.ok(field?.getAttribute("aria-describedby")?.split(" ").includes("child-gmail-error"));
+    assert.equal(document.getElementById("child-gmail-error")?.textContent, message);
+  }
+  assert.equal(calls.filter((call) => call.url === "/api/invites").length, 0);
+});
+
+test("repeated connect sign-in submits authenticate once while the account read is pending", async () => {
+  await render(<ConnectScreen token={fixture} />); await credentials();
+  let release!: () => void; holdMe = new Promise((r) => { release = r; });
+  await submit(); await submit();
+  assert.equal(button("Signing in…").disabled, true);
+  assert.equal(authCalls.length, 1);
+  assert.equal(document.querySelector("form")?.getAttribute("aria-busy"), "true");
+  release(); await settle();
+  button("Accept this link"); assert.equal(accepts().length, 0);
+});
+
+test("signup without role requires reopening the link after choosing student and still needs explicit accept", async () => {
+  sessionAfterAuth = { ...student, role: null, first_name: null }; signUpSession = true;
+  await render(<ConnectScreen token={fixture} />); await credentials(true); await submit();
+  assert.deepEqual(navigations, ["/role"]); assert.equal(accepts().length, 0);
+  me = student; navigations.length = 0;
+  await render(<WaitScreen />);
+  assert.match(text(), /Waiting for a parent/); assert.equal(accepts().length, 0);
+  await render(<ConnectScreen token={fixture} />);
+  button("Accept this link"); assert.deepEqual(navigations, []); assert.equal(accepts().length, 0);
+  await click("Accept this link");
+  assert.deepEqual(navigations, ["/wait"]);
+  assert.equal(accepts().length, 1); assert.equal(accepts()[0].init?.body, undefined);
+  assert.ok(!calls.some((call) => call.url === "/api/profile"));
+});
+
+for (const needs_parent of [true, false]) {
+  test(`parent household read that now identifies a student redirects with needs_parent=${needs_parent} before rendering private parent UI`, async () => {
+    me = parent;
+    homeReply = { status: 200, body: { role: "student", first_name: "Lin", needs_parent, children: [] } };
+    await render(<HomeScreen />);
+    assert.deepEqual(navigations, [needs_parent ? "/wait" : "/home"]);
+    assert.equal(document.querySelector("form"), null);
+    assert.doesNotMatch(text(), /Hello, Ada|Connect a child|No child is linked/);
+  });
+}
+
+test("malformed child data fails the whole household read, focuses retry, and never paints a partial list", async () => {
+  me = parent;
+  homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [{ first_name: "Zoe" }, { email: privateValue }] } };
+  await render(<HomeScreen />);
+  assert.match(text(), /We could not open your home/);
+  assert.equal(document.activeElement, button("Try again"));
+  assert.equal(document.querySelector("form"), null);
+  assert.doesNotMatch(text(), /Zoe|No child is linked/); assert.deepEqual(navigations, []);
+});
+
+test("malformed acceptance stays retryable without navigating or printing response details", async () => {
+  me = student; acceptReply = { status: 200, body: { state: privateValue } };
+  await render(<ConnectScreen token={fixture} />); await click("Accept this link");
+  assert.match(text(), /This link could not be accepted. Try again./);
+  button("Accept this link"); assert.deepEqual(navigations, []);
+  assert.match(document.activeElement?.textContent ?? "", /This link could not be accepted/);
+  acceptReply = { status: 200, body: { state: "accepted" } };
+  await click("Accept this link"); assert.deepEqual(navigations, ["/wait"]);
+});
+
+test("malformed invite success remains a fixed failure and preserves the address for retry", async () => {
+  me = parent;
+  homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [] } };
+  inviteReply = { status: 201, body: { invited_email: "https://example.test/private", token: fixture } };
+  await render(<HomeScreen />); await input("child-gmail", "child@gmail.com"); await submit();
+  assert.match(text(), /The connect email could not be sent. Try again./);
+  assert.doesNotMatch(text(), /Connect email sent to|https:\/\//);
+  assert.equal((document.getElementById("child-gmail") as HTMLInputElement).value, "child@gmail.com");
+  assert.equal(button("Send connect email").disabled, false);
+});
+
+test("Strict Mode waiting effect restart releases its request lock and ignores the obsolete completion", async () => {
+  let release!: () => void; holdHome = new Promise((r) => { release = r; });
+  await render(<React.StrictMode><WaitScreen /></React.StrictMode>);
+  assert.equal(calls.filter((call) => call.url === "/api/home").length, 2);
+  release(); await settle();
+  assert.match(text(), /Waiting for a parent/); assert.deepEqual(navigations, []);
+  assert.equal(button("Check again").disabled, false);
+  holdHome = null; await click("Check again");
+  assert.match(text(), /Still waiting for a parent/);
+});

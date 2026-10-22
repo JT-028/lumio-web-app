@@ -349,6 +349,63 @@ async function getHome(): Promise<Response> {
   return GET(new Request("http://localhost:3010/api/home"));
 }
 
+test("a first explicit bodyless accept uses canonical session Gmail and opens the household gate", async () => {
+  const parentId = userId(1); const studentId = userId(2);
+  seedProfile({ id: parentId, role: "parent", firstName: "Ada", email: "parent@example.test" });
+  seedProfile({ id: studentId, role: "student", firstName: "Lin", email: "lin@gmail.com" });
+  const raw = seedInvite({ id: inviteId(20), parentId, email: "l.i.n+school@googlemail.com", raw: rawToken("bodyless-first"), expiresAt: "2099-01-01T00:00:00.000Z" });
+  signIn(studentId, "lin@gmail.com");
+  assert.equal((await getHome()).status, 200);
+  assert.equal(((await (await getHome()).json()) as { needs_parent: boolean }).needs_parent, true);
+  const response = await postAccept(raw);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { state: "accepted", student_id: studentId, main_parent_id: parentId });
+  assert.equal(rpcCalls, 1);
+  assert.equal(((await (await getHome()).json()) as { needs_parent: boolean }).needs_parent, false);
+  assert.equal(tables.households.length, 1); assert.equal(tables.cards.length, 8);
+});
+
+test("accept identity comes from the authenticated session even when the stored profile and body match the invite", async () => {
+  const parentId = userId(1); const studentId = userId(2);
+  seedProfile({ id: parentId, role: "parent", firstName: "Ada", email: "parent@example.test" });
+  seedProfile({ id: studentId, role: "student", firstName: "Lin", email: "lin@gmail.com" });
+  const raw = seedInvite({ id: inviteId(21), parentId, email: "lin@gmail.com", raw: rawToken("session-identity"), expiresAt: "2099-01-01T00:00:00.000Z" });
+  signIn(studentId, "different@gmail.com");
+  const response = await postAccept(raw, { invited_email: "lin@gmail.com", email: "lin@gmail.com" });
+  assert.equal(response.status, 403);
+  assert.equal(assertEnvelope(await response.json()).code, "EMAIL_MISMATCH");
+  assert.equal(rpcCalls, 0); assert.deepEqual(tables.households, []); assert.deepEqual(tables.cards, []);
+  assert.equal(tables.connect_invites[0].state, "sent");
+});
+
+for (const state of ["accepted", "ignored"] as const) {
+  test(`a different student with the same canonical Gmail cannot replay an ${state} token`, async () => {
+    const parentId = userId(1); const studentId = userId(2);
+    seedProfile({ id: parentId, role: "parent", firstName: "Ada", email: "parent@example.test" });
+    seedProfile({ id: studentId, role: "student", firstName: "Lin", email: "lin@gmail.com" });
+    const raw = seedInvite({ id: inviteId(22), parentId, email: "l.i.n+school@googlemail.com", raw: rawToken(`replay-${state}`), state, expiresAt: "2020-01-01T00:00:00.000Z" });
+    tables.connect_invites[0].accepted_by_student_id = userId(3);
+    const before = structuredClone(tables);
+    signIn(studentId, "lin@gmail.com");
+    assert.equal((await getConnect(raw)).status, 200);
+    const response = await postAccept(raw);
+    assert.equal(response.status, 409);
+    assert.equal(assertEnvelope(await response.json()).code, "ALREADY_USED");
+    assert.equal(rpcCalls, 0); assert.deepEqual(tables, before);
+  });
+}
+
+test("household reads refuse missing sessions and missing chosen roles", async () => {
+  const response = await getHome();
+  assert.equal(response.status, 401);
+  assert.equal(assertEnvelope(await response.json()).code, "UNAUTHENTICATED");
+  signIn(userId(2), "lin@gmail.com");
+  const roleRequired = await getHome();
+  assert.equal(roleRequired.status, 403);
+  assert.equal(assertEnvelope(await roleRequired.json()).code, "ROLE_REQUIRED");
+  assert.deepEqual(tables.households, []); assert.equal(rpcCalls, 0);
+});
+
 async function getMe(): Promise<Response> {
   const { GET } = await import("../src/app/api/me/route.ts");
   return GET(new Request("http://localhost:3010/api/me"));
