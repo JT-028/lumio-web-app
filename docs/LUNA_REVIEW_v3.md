@@ -4,7 +4,7 @@ Date: 23 October 2026. Scope: Jules's uncommitted M2 frontend and integration wi
 
 ## Current status
 
-Luna gate PASS for the scoped M2 frontend. Two MED findings and two LOW comment findings are resolved. Zero CRITICAL, HIGH, MED, or LOW findings remain open. Final typechecks, full tests, production build, diff checks, and synthetic BrowserOS interactions pass. Local commit preparation is in progress. No push, deploy, or Quinn run has occurred.
+Luna gate PASS for the scoped M2 frontend. Two MED findings and two LOW comment findings are resolved. Zero CRITICAL, HIGH, MED, or LOW findings remain open. Final typechecks, full tests, production build, diff checks, and synthetic BrowserOS interactions pass. Code commit is `5db49003ec4b7e8d3d2e3a119cefaf7d843c4ef6`. Ready for the main agent to invoke Quinn. No push, deploy, or Quinn run has occurred.
 
 - [x] Read repository AGENTS.md, Luna and agent-squad skills, and exact installed ponytail, Thermos, and pstack gate sources.
 - [x] Confirm working tree matches the briefing. Existing feature branch and user inputs remain in place.
@@ -13,8 +13,8 @@ Luna gate PASS for the scoped M2 frontend. Two MED findings and two LOW comment 
 - [x] Reproduce real findings, apply small fixes, and rerun regression checks.
 - [x] Run application typecheck, test typecheck, full tests, production build, and diff checks.
 - [x] Attempt remaining BrowserOS checks using the inspected synthetic fixture on 3012.
-- [ ] Stage only owned files, commit locally with required attribution, and record hashes.
-- [ ] Return gate evidence and remaining checks for the main agent to hand to Quinn.
+- [x] Stage only owned files, commit locally with required attribution, and record code hash.
+- [x] Prepare gate evidence and remaining checks for the main agent to hand to Quinn.
 
 ## Prerequisites and limits
 
@@ -80,7 +80,7 @@ The code commit includes the 12 application/test files listed in the staged diff
 
 All existing user inputs remain untracked and unchanged: root `AGENTS.md`, `docs/IRIS_LOGIN_SPEC_v1.md`, `docs/IRIS_M2_SPEC_v1.md`, `docs/IRIS_STUDENT_HOME_SPEC_v1.md`, `docs/SESSION_HANDOFF_2026-10-22.md`, and `docs/inspiration/`. They informed the review without becoming part of this feature commit. No `.env`, secret, fixture server, scratch script, node_modules, or generated bundle is staged.
 
-Commit hash will be recorded immediately after the local commit. No push or deploy.
+Code and initial review artifacts are committed locally at `5db49003ec4b7e8d3d2e3a119cefaf7d843c4ef6`, `feat(m2): Add reviewed parent connection screens`, on `feat/lumio-m1-shell`. The required Grok co-author footer is present. This final report update is a separate documentation-only child commit. The final response supplies its exact hash, which cannot be embedded in its own contents. No push or deploy.
 
 ## Contract and scope verdict
 
