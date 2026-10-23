@@ -1,0 +1,1 @@
+export default { content: ["./index.html", "./src/**/*.{ts,tsx}"], theme: { extend: { fontFamily: { display: ['"Baloo 2"', 'Nunito', 'sans-serif'], sans: ['Nunito', 'sans-serif'] } } }, plugins: [] };

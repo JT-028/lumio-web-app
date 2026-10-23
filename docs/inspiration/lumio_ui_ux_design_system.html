@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#172B4D">
+<title>Lumio — UI/UX Design System & Website Theme</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Nunito:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --color-brand:#172B4D; --color-brand-hover:#223D66;
+  --color-accent:#EFB94E; --color-accent-hover:#DDA638;
+  --color-page:#FFF9EF; --color-surface:#FFFFFF; --color-surface-soft:#F5F0E7;
+  --color-border:#E9E1D5; --color-text:#2C3442; --color-text-muted:#6D6A65;
+  --color-success:#2F7653; --color-success-soft:#DCECDF; --color-error:#B94A45;
+  --color-info-soft:#DDEAF9; --radius-card:20px; --radius-button:14px;
+  --shadow-card:0 4px 16px rgb(54 43 27 / 6%);
+  --shadow-floating:0 12px 32px rgb(23 43 77 / 12%);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--color-page);color:var(--color-text);font:16px/1.7 "Nunito",sans-serif}
+a{color:var(--color-brand)}
+button{font:inherit}
+.layout{display:grid;grid-template-columns:270px minmax(0,1fr);min-height:100vh}
+.sidebar{background:var(--color-brand);color:white;padding:28px 18px;position:sticky;top:0;height:100vh;overflow:auto}
+.brand{display:flex;align-items:center;gap:12px;padding:4px 10px 26px}
+.brand-mark{width:44px;height:44px;border-radius:14px;background:var(--color-accent);color:var(--color-brand);display:grid;place-items:center;font-size:24px}
+.brand strong{font:800 27px/1 "Baloo 2",sans-serif}
+.brand small{display:block;color:#d9e1ee;font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-top:5px}
+.nav-label{color:#b8c6db;font-size:11px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;padding:12px 12px 7px}
+.sidebar nav a{display:block;color:#eef3fb;text-decoration:none;padding:9px 12px;border-radius:11px;font-size:14px;margin:2px 0}
+.sidebar nav a:hover,.sidebar nav a.active{background:#2b4266}
+.side-note{margin:26px 7px 0;padding:15px;border:1px solid #405373;border-radius:15px;color:#dce6f5;font-size:13px}
+main{min-width:0;padding:48px clamp(22px,5vw,76px) 80px;max-width:1500px}
+.hero{background:linear-gradient(135deg,#172B4D 0%,#25456e 100%);color:white;border-radius:28px;padding:clamp(28px,5vw,58px);position:relative;overflow:hidden;box-shadow:var(--shadow-floating)}
+.hero:after{content:"✦  ·  ✧  ·  ✦";position:absolute;right:26px;top:25px;color:var(--color-accent);font-size:26px;letter-spacing:10px;opacity:.85}
+.eyebrow{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.16em;color:var(--color-accent)}
+h1,h2,h3,h4{font-family:"Baloo 2",sans-serif;line-height:1.2;color:var(--color-brand)}
+h1{font-size:clamp(38px,5vw,62px);margin:12px 0}
+.hero h1{color:white;max-width:800px}
+.hero p{color:#e1e8f3;max-width:720px;font-size:18px}
+.hero-tag{display:inline-block;background:var(--color-accent);color:#382a19;border-radius:999px;padding:7px 13px;font-weight:800;font-size:13px;margin-top:12px}
+section{scroll-margin-top:28px;margin:52px 0}
+h2{font-size:32px;margin:0 0 12px}
+h3{font-size:22px;margin:0 0 8px}
+p{margin:8px 0 16px}
+.lead{font-size:18px;color:var(--color-text-muted);max-width:850px}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.card{background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-card);padding:21px;box-shadow:var(--shadow-card)}
+.card p:last-child{margin-bottom:0}
+.personality{display:flex;gap:12px;align-items:flex-start}
+.emoji{font-size:25px;line-height:1.3}
+.swatches{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.swatch{overflow:hidden;background:white;border:1px solid var(--color-border);border-radius:16px}
+.swatch-color{height:92px;padding:10px;display:flex;align-items:flex-end;font-size:12px;font-weight:800}
+.swatch-label{padding:12px;font-weight:800}
+.swatch-label small{display:block;color:var(--color-text-muted);font-weight:600;font-size:12px;margin-top:3px}
+table{width:100%;border-collapse:collapse;background:white;border-radius:14px;overflow:hidden;border:1px solid var(--color-border);font-size:14px}
+th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--color-border);vertical-align:top}
+th{background:#f4eee4;color:var(--color-brand);font-weight:800}
+tr:last-child td{border-bottom:0}
+ul,ol{padding-left:23px}
+li{padding:3px 0}
+.pill{display:inline-block;border-radius:999px;padding:3px 9px;background:#e8eef8;color:var(--color-brand);font-size:12px;font-weight:800}
+.flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.flow-step{background:white;border:1px solid var(--color-border);border-radius:16px;padding:17px}
+.flow-step b{display:block;color:var(--color-brand);font:700 20px "Baloo 2",sans-serif}
+.callout{background:#f7edda;border-left:4px solid var(--color-accent);padding:17px 20px;border-radius:0 14px 14px 0;margin:18px 0}
+pre{overflow:auto;background:#17243b;color:#f5f0e7;border-radius:16px;padding:22px;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace}
+code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.92em;background:#f0e9de;border-radius:5px;padding:2px 5px}
+pre code{background:transparent;padding:0}
+footer{border-top:1px solid var(--color-border);padding-top:24px;color:var(--color-text-muted);font-size:14px}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.sidebar{position:relative;height:auto;padding:14px}.brand{padding-bottom:12px}.sidebar nav{display:flex;overflow:auto;gap:4px}.nav-label,.side-note{display:none}.sidebar nav a{white-space:nowrap}.cards{grid-template-columns:1fr}.swatches{grid-template-columns:repeat(2,minmax(0,1fr))}.flow{grid-template-columns:repeat(2,minmax(0,1fr))}main{padding-top:26px}}
+@media(max-width:520px){.swatches{grid-template-columns:1fr 1fr}.flow{grid-template-columns:1fr 1fr}table{font-size:12px}th,td{padding:9px 8px}.hero:after{display:none}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="layout">
+<aside class="sidebar">
+  <div class="brand"><div class="brand-mark">✦</div><div><strong>Lumio</strong><small>Design system</small></div></div>
+  <div class="nav-label">Guide</div>
+  <nav>
+    <a class="active" href="#identity">Brand identity</a><a href="#colors">Color system</a><a href="#type">Typography</a>
+    <a href="#navigation">Navigation</a><a href="#mascot">Mascot system</a><a href="#screens">Core screens</a>
+    <a href="#gamification">Gamification</a><a href="#tutoring">AI tutoring</a><a href="#components">Components</a>
+    <a href="#accessibility">Accessibility</a><a href="#tokens">CSS tokens</a><a href="#roadmap">Roadmap</a>
+  </nav>
+  <div class="side-note">A learning platform first, an adventure game second.</div>
+</aside>
+<main>
+<header class="hero">
+  <div class="eyebrow">UI / UX Design System</div>
+  <h1>A cozy magical world for learning.</h1>
+  <p>Lumio pairs a friendly owl wizard with personalized study guides, adaptive tutoring, meaningful practice, and mastery-based rewards.</p>
+  <span class="hero-tag">Your little guide to big ideas.</span>
+</header>
+
+<section id="identity">
+  <div class="eyebrow">01 / Foundation</div><h2>Brand identity</h2>
+  <p class="lead">Lumio should feel like stepping into a little magical library where every child has a personal owl mentor and a world of knowledge to explore. Keep the experience playful enough to invite return visits, but structured enough that parents and teachers trust it as a serious learning tool.</p>
+  <div class="cards">
+    <article class="card personality"><div class="emoji">♡</div><div><h3>Supportive</h3><p>Never shames mistakes. Treats confusion as a normal part of learning.</p></div></article>
+    <article class="card personality"><div class="emoji">✦</div><div><h3>Magical</h3><p>Makes discovery exciting through subtle stars, warm light, and storybook details.</p></div></article>
+    <article class="card personality"><div class="emoji">🌱</div><div><h3>Encouraging</h3><p>Celebrates real improvement, persistence, and independent problem-solving.</p></div></article>
+    <article class="card personality"><div class="emoji">📖</div><div><h3>Intelligent</h3><p>Explains concepts and offers useful next steps instead of simply scoring answers.</p></div></article>
+  </div>
+  <div class="callout"><strong>Design rule:</strong> Use the owl to express emotion, the interface to communicate information, and the reward system to reinforce learning. Magical effects should mark meaningful moments, not distract during lessons.</div>
+</section>
+
+<section id="colors">
+  <div class="eyebrow">02 / Visual language</div><h2>Color system</h2>
+  <p class="lead">The palette comes from the mascot: deep navy fabric, golden stars, warm brown feathers, and the creamy background of a storybook.</p>
+  <div class="swatches">
+    <div class="swatch"><div class="swatch-color" style="background:#172B4D;color:white">#172B4D</div><div class="swatch-label">Midnight Library<small>Brand, navigation, dark headings</small></div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#EFB94E;color:#382A19">#EFB94E</div><div class="swatch-label">Starlight Gold<small>XP, stars, rewards, highlights</small></div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#FFF9EF;color:#493C30">#FFF9EF</div><div class="swatch-label">Storybook Cream<small>Page and reading background</small></div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#A95F38;color:white">#A95F38</div><div class="swatch-label">Owl Chestnut<small>Warm accents and illustrations</small></div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#DDEAF9;color:#243F66">#DDEAF9</div><div class="swatch-label">Moonlight Blue<small>Tutor panels and selected states</small></div></div>
+    <div class="swatch"><div class="swatch-color" style="background:#DCECDF;color:#28563D">#DCECDF</div><div class="swatch-label">Sage Growth<small>Completion and mastery</small></div></div>
+  </div>
+  <h3 style="margin-top:25px">Semantic colors</h3>
+  <table><thead><tr><th>Purpose</th><th>Color</th><th>Use</th></tr></thead><tbody>
+  <tr><td>Correct answer</td><td><code>#2F7653</code></td><td>Success feedback and correct responses</td></tr>
+  <tr><td>Needs attention</td><td><code>#A95A35</code></td><td>Gentle reminders and review suggestions</td></tr>
+  <tr><td>Incorrect answer</td><td><code>#B94A45</code></td><td>Error feedback with an explanation</td></tr>
+  <tr><td>Secondary text</td><td><code>#6D6A65</code></td><td>Descriptions and metadata</td></tr>
+  <tr><td>Borders</td><td><code>#E9E1D5</code></td><td>Card outlines, dividers, inputs</td></tr>
+  <tr><td>Elevated surface</td><td><code>#FFFFFF</code></td><td>Quiz cards, dialogs, floating panels</td></tr>
+  </tbody></table>
+  <p>Use navy with white text for primary actions. Reserve gold for rewards and milestone moments. Never use color alone to communicate correctness.</p>
+</section>
+
+<section id="type">
+  <div class="eyebrow">03 / Readability</div><h2>Typography & visual language</h2>
+  <div class="cards">
+    <article class="card"><div class="pill">DISPLAY · BALOO 2</div><h3 style="font-size:30px;margin-top:12px">Every great mind starts curious.</h3><p>Friendly page titles, achievement headings, and short celebratory messages.</p></article>
+    <article class="card"><div class="pill">BODY · NUNITO</div><h3>Let's learn something new today!</h3><p>Navigation, instructions, questions, buttons, labels, and reading content.</p></article>
+  </div>
+  <h3 style="margin-top:25px">Type scale</h3>
+  <table><thead><tr><th>Element</th><th>Size</th><th>Weight</th></tr></thead><tbody>
+  <tr><td>Hero heading</td><td>36–44 px</td><td>Bold</td></tr><tr><td>Page heading</td><td>28–32 px</td><td>Bold</td></tr>
+  <tr><td>Card heading</td><td>18–22 px</td><td>Bold</td></tr><tr><td>Body text</td><td>16–18 px</td><td>Regular</td></tr><tr><td>Small labels</td><td>14 px minimum</td><td>Medium</td></tr>
+  </tbody></table>
+  <p>Use 16–22 px card radii, 12–16 px button radii, soft warm shadows, thin cream-gray borders, rounded line icons, and restrained star/moon decorations. Give math equations their own space.</p>
+</section>
+
+<section id="navigation">
+  <div class="eyebrow">04 / Information architecture</div><h2>Layout & navigation</h2>
+  <table><thead><tr><th>Destination</th><th>Purpose</th></tr></thead><tbody>
+  <tr><td>Home</td><td>Personalized greeting, next lesson, daily goal</td></tr><tr><td>Explore</td><td>Subjects, topic map, recommended quests</td></tr>
+  <tr><td>My Guides</td><td>Generated study guides and saved materials</td></tr><tr><td>Ask Lumio</td><td>AI tutoring, explanations, and hints</td></tr>
+  <tr><td>Practice</td><td>Topic-based quizzes and adaptive exercises</td></tr><tr><td>Rewards</td><td>XP, badges, milestones, and earned cosmetics</td></tr>
+  <tr><td>My Progress</td><td>Skills mastered, review topics, learning history</td></tr><tr><td>Settings</td><td>Profile, accessibility, preferences, parent controls</td></tr>
+  </tbody></table>
+  <div class="cards" style="margin-top:16px">
+    <article class="card"><h3>Desktop</h3><p>Left sidebar around 224–248 px. Main content max width around 1200 px. Keep one clear primary action per page.</p></article>
+    <article class="card"><h3>Mobile</h3><p>Replace the sidebar with a bottom navigation bar showing four or five key destinations. Keep touch targets large and spacing comfortable.</p></article>
+  </div>
+</section>
+
+<section id="mascot">
+  <div class="eyebrow">05 / Character language</div><h2>Mascot system: Lumio as the tutor</h2>
+  <p class="lead">The owl is an active teaching companion, not just decoration. Its expression should reinforce the purpose of the dialogue.</p>
+  <table><thead><tr><th>Reaction ID</th><th>Purpose</th><th>Example dialogue</th></tr></thead><tbody>
+  <tr><td><code>greeting</code></td><td>Welcome</td><td>“Hi there! Ready to discover something new?”</td></tr>
+  <tr><td><code>teaching</code></td><td>Explain concepts</td><td>“Let's look at this one step at a time.”</td></tr>
+  <tr><td><code>thinking</code></td><td>Hints and reasoning</td><td>“What do you notice about these two numbers?”</td></tr>
+  <tr><td><code>listening</code></td><td>Student questions</td><td>“I'm listening. What would you like to know?”</td></tr>
+  <tr><td><code>encouraging</code></td><td>Mistakes or difficulty</td><td>“That's okay! Mistakes help us learn. Let's try another way.”</td></tr>
+  <tr><td><code>celebrating</code></td><td>Mastery and achievements</td><td>“You figured it out! You can solve this kind of problem on your own!”</td></tr>
+  <tr><td><code>confused</code></td><td>Clarification</td><td>“Could you tell me a little more about what you mean?”</td></tr>
+  <tr><td><code>sleeping</code></td><td>Optional idle state</td><td>“Taking a little break? I'll be here when you're ready.”</td></tr>
+  <tr><td><code>welcoming</code></td><td>Returning from a break</td><td>“Welcome back! Shall we continue our adventure?”</td></tr>
+  </tbody></table>
+  <div class="callout">Implementation: select mascot expressions using stable reaction identifiers in tutor response metadata. Export each pose as an individual transparent asset with consistent framing and scale.</div>
+</section>
+
+<section id="screens">
+  <div class="eyebrow">06 / Key experiences</div><h2>Core page designs</h2>
+  <div class="cards">
+    <article class="card"><h3>A. Home dashboard</h3><ul><li>Personalized owl greeting</li><li>Continue Learning card</li><li>Daily goal and XP progress</li><li>Recent study guides</li><li>Recommended next quest</li><li>Small achievement preview</li></ul><span class="pill">CTA: Continue Learning</span></article>
+    <article class="card"><h3>B. Explore quests</h3><ul><li>Illustrated subject cards or islands</li><li>Clear subject labels</li><li>Topic progress indicators</li><li>Recommended topics</li><li>Meaningful prerequisites</li><li>Review paths for difficult topics</li></ul><span class="pill">CTA: Explore a Topic</span></article>
+    <article class="card"><h3>C. Personalized study guide</h3><ol><li>Topic and learning objectives</li><li>Age-appropriate explanation</li><li>Worked examples</li><li>Key facts, vocabulary, formulas</li><li>Practice with optional hints</li><li>Recap and self-check</li></ol><span class="pill">CTA: Practice This Topic</span></article>
+    <article class="card"><h3>D. Practice & adaptive tutoring</h3><ul><li>One main question per screen</li><li>Large answer targets</li><li>Optional hints</li><li>Step-by-step explanations</li><li>Specific feedback for mistakes</li><li>Non-pressuring progress indicator</li></ul><span class="pill">CTA: Check Answer / Try Again</span></article>
+    <article class="card"><h3>E. Mastery & rewards</h3><ul><li>Skills the student can now do</li><li>XP earned with subtle animation</li><li>Meaningful milestone badge</li><li>Clear next step</li><li>Review recommendation if needed</li></ul><span class="pill">CTA: Continue Your Journey</span></article>
+  </div>
+</section>
+
+<section id="gamification">
+  <div class="eyebrow">07 / Progression</div><h2>Gamification that supports mastery</h2>
+  <div class="flow">
+    <div class="flow-step"><b>01 · Learn</b><p>Understand a new concept.</p></div>
+    <div class="flow-step"><b>02 · Practice</b><p>Apply it to questions.</p></div>
+    <div class="flow-step"><b>03 · Master</b><p>Demonstrate understanding.</p></div>
+    <div class="flow-step"><b>04 · Unlock</b><p>Earn rewards and new challenges.</p></div>
+  </div>
+  <h3 style="margin-top:25px">Reward mechanics</h3>
+  <table><thead><tr><th>Mechanic</th><th>Guideline</th></tr></thead><tbody>
+  <tr><td>XP</td><td>Reward meaningful practice, learning activities, and demonstrated improvement.</td></tr>
+  <tr><td>Skill levels</td><td>Reflect progress in individual topics, not just time spent.</td></tr>
+  <tr><td>Badges</td><td>Recognize persistence, improvement, and independent problem-solving.</td></tr>
+  <tr><td>Streaks</td><td>Encourage consistency while allowing breaks without harsh penalties.</td></tr>
+  <tr><td>Unlockables</td><td>Offer owl accessories, library decorations, or map areas.</td></tr>
+  <tr><td>Mastery milestones</td><td>Require demonstrated understanding across relevant questions, possibly over multiple sessions.</td></tr>
+  <tr><td>Daily goals</td><td>Offer small, achievable goals based on student needs and available time.</td></tr>
+  </tbody></table>
+  <div class="callout"><strong>Core rule:</strong> Don't award more XP just because a student clicks faster or submits more answers. Reward meaningful attempts, corrections, and learning progress. Avoid punitive streaks, shaming leaderboards, and pay-to-win mechanics.</div>
+</section>
+
+<section id="tutoring">
+  <div class="eyebrow">08 / Dialogue</div><h2>AI tutoring conversation</h2>
+  <p class="lead">Lumio should guide students toward understanding rather than immediately revealing every answer.</p>
+  <div class="cards">
+    <article class="card"><span class="pill">LUMIO</span><p>Let's solve this together! What is <strong>12 ÷ 3</strong>? Imagine sharing 12 stars equally among 3 friends.</p></article>
+    <article class="card" style="background:#DDEAF9"><span class="pill">STUDENT</span><p>Is it 4?</p></article>
+    <article class="card" style="grid-column:1/-1"><span class="pill">LUMIO</span><p>That's right! Each friend gets 4 stars. You found the answer by sharing equally. Want to try one with a bigger number?</p><p><button style="border:0;border-radius:12px;background:#172B4D;color:white;padding:10px 14px">Try another</button> <button style="border:1px solid #E9E1D5;border-radius:12px;background:#FFF9EF;color:#172B4D;padding:10px 14px">Explain it again</button> <button style="border:1px solid #E9E1D5;border-radius:12px;background:#FFF9EF;color:#172B4D;padding:10px 14px">Show an example</button></p></article>
+  </div>
+  <ul><li>Keep explanations short, friendly, and focused on one idea.</li><li>Offer worked examples, visual analogies, or simpler wording.</li><li>Use guiding questions before revealing answers when appropriate.</li><li>Acknowledge frustration and suggest a manageable next step.</li><li>Keep the study guide and current question accessible during tutoring.</li><li>Check generated explanations for age appropriateness and accuracy.</li></ul>
+</section>
+
+<section id="components">
+  <div class="eyebrow">09 / UI library</div><h2>Reusable components</h2>
+  <table><thead><tr><th>Component</th><th>Specification</th></tr></thead><tbody>
+  <tr><td>Primary button</td><td>Navy fill, white text, rounded corners, visible focus state</td></tr>
+  <tr><td>Secondary button</td><td>Cream or white surface, navy text, subtle border</td></tr>
+  <tr><td>Reward button</td><td>Gold fill and dark text; reward-related actions only</td></tr>
+  <tr><td>Learning card</td><td>White surface, subtle border, 18 px radius</td></tr>
+  <tr><td>Tutor message</td><td>Warm cream background, mascot avatar, readable text</td></tr>
+  <tr><td>Quiz answer</td><td>Large clickable row with selected, correct, and incorrect states</td></tr>
+  <tr><td>Progress bar</td><td>Cream track, gold fill, supporting text or percentage</td></tr>
+  <tr><td>Badge</td><td>Small icon, short label, optional rarity styling</td></tr>
+  <tr><td>Topic card</td><td>Simple illustration, topic name, progress, next action</td></tr>
+  <tr><td>Modal</td><td>Clear heading, one main task, easy dismissal</td></tr>
+  <tr><td>Toast</td><td>Brief confirmation with text and icon; never color alone</td></tr>
+  </tbody></table>
+  <p>Use a 4 px spacing scale: 4, 8, 12, 16, 24, 32, and 48 px. Standardize focus rings, hover/loading/disabled states, and error messages.</p>
+</section>
+
+<section id="accessibility">
+  <div class="eyebrow">10 / Inclusive design</div><h2>Accessibility, child safety & responsive UX</h2>
+  <div class="cards">
+    <article class="card"><h3>Accessible by default</h3><ul><li>Important touch targets at least 44 × 44 CSS px</li><li>Readable text and strong contrast</li><li>Keyboard access for navigation, quizzes, and dialogs</li><li>Reduced-motion option</li><li>Sound effects optional and muted by default</li><li>Feedback uses text and icons, not color alone</li></ul></article>
+    <article class="card"><h3>Safe learning experience</h3><ul><li>Collect only necessary student data</li><li>Offer appropriate parent and teacher oversight</li><li>Clearly identify Lumio as an AI assistant</li><li>Allow questionable explanations to be flagged</li><li>Avoid pressure tactics and punitive streaks</li><li>Use guided navigation for younger learners</li></ul></article>
+  </div>
+</section>
+
+<section id="tokens">
+  <div class="eyebrow">11 / Developer handoff</div><h2>CSS design tokens</h2>
+  <p class="lead">Starter variables for implementing the Lumio visual language in CSS or mapping into a Tailwind theme.</p>
+  <pre><code>:root {
+  --color-brand: #172B4D;
+  --color-brand-hover: #223D66;
+  --color-accent: #EFB94E;
+  --color-accent-hover: #DDA638;
+
+  --color-page: #FFF9EF;
+  --color-surface: #FFFFFF;
+  --color-surface-soft: #F5F0E7;
+  --color-border: #E9E1D5;
+
+  --color-text: #2C3442;
+  --color-text-muted: #6D6A65;
+  --color-success: #2F7653;
+  --color-success-soft: #DCECDF;
+  --color-error: #B94A45;
+  --color-info-soft: #DDEAF9;
+
+  --radius-card: 20px;
+  --radius-button: 14px;
+  --radius-input: 12px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+
+  --shadow-card: 0 4px 16px rgb(54 43 27 / 6%);
+  --shadow-floating: 0 12px 32px rgb(23 43 77 / 12%);
+}</code></pre>
+</section>
+
+<section id="roadmap">
+  <div class="eyebrow">12 / Delivery plan</div><h2>Recommended implementation order</h2>
+  <ol>
+    <li><strong>Foundation:</strong> Typography, colors, buttons, cards, responsive navigation, mascot asset pipeline.</li>
+    <li><strong>Core learning:</strong> Home dashboard, study-guide generation, saved guides, practice questions, AI tutoring.</li>
+    <li><strong>Learning feedback:</strong> Hints, explanations, topic progress, review recommendations, mastery checks.</li>
+    <li><strong>Gamification:</strong> XP, badges, unlockables, quest maps, meaningful celebrations.</li>
+    <li><strong>Oversight and refinement:</strong> Parent/teacher summaries, privacy settings, accessibility testing, evaluation with intended users.</li>
+  </ol>
+</section>
+<footer><strong>Lumio UI/UX Design System</strong><br>Final direction: a premium, cozy storybook brought to life, with a charming owl wizard guiding children through structured learning. The magical world creates motivation; tutoring, practice, and mastery deliver the educational value.</footer>
+</main>
+</div>
+</body>
+</html>
