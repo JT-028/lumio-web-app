@@ -1,0 +1,60 @@
+# Theo auth recovery — implementation v1
+
+Date: 2026-10-25. Baseline: `4ff8fc6`, `feat/lumio-m1-shell`.
+Status: backend implementation DONE; ready for main's writer freeze, Quinn integration verification and Luna review. This is not a release or QA PASS.
+
+Read repository AGENTS, Theo's installed backend-developer skill/bundle, Alex recovery plan and Aria's full frozen/reconciled recovery contract. No nested agents, tests authored, UI/client-helper edits, package/CI/environment changes, installs, commits, pushes, provider changes, accounts, emails or live auth attempts.
+
+## Implemented contract
+
+- `src/domain/auth-contract.ts`: frozen public types; no credentials in JSON.
+- `src/lib/auth-security.ts`: configured origin only, exact Origin/JSON/Fetch Metadata/double-submit CSRF checks, constant-time comparison, strict literal continuation allowlist, exact JSON keys, ten-second provider HTTP timeout.
+- `src/lib/auth-state.ts`: bounded AES-256-GCM state using purpose-separated HKDF and the existing server key, origin-bound authenticated data, schema/version/time validation. Intent lasts one hour; link/OAuth ten minutes; migration marker seven days. Updating existing intent preserves its original encrypted expiry rather than extending onboarding privileges.
+- `src/lib/auth-session.ts`: server response-cookie adapter, migration/cleanup/CSRF rotation, isolated nonpersistent provider clients. Existing Supabase adapters force host-only HttpOnly cookies, Path=/, SameSite=Lax, production Secure and at most seven days; explicit expiry/deletion remains supported. Writable API cookie errors are not swallowed.
+- `src/services/auth.ts`: every frozen context/intent/password signup/sign-in/Google/resend/recovery/confirmation/reset/cancel/refresh/logout operation; safe provider classification and neutral account-specific send responses. Google capability comes from provider outcomes. Returned authorize URL is restricted to configured provider origin/path.
+- Exact route files under `src/app/api/auth/*`, existing `/api/sign-out`, `/auth/callback`, and new `/auth/confirm` and `/auth/recovery` delegate to the service. Link GETs only stage candidates and 303 to clean destinations; POST verifies provider proof once. OAuth requires matching sealed nonce and PKCE verifier, rejects malformed/duplicate parameters, clears correlation/verifier on every outcome and never finalizes Google onboarding.
+- Reset freshly verifies recovery proof on an isolated client, checks usable session expiry and matching provider-validated identity, updates only that identity, consumes local proof on success/failure, requests global revocation, clears ordinary/pending credentials and requires fresh login. Ordinary login, signup proof, candidate-cookie integrity and CSRF alone grant no recovery privilege.
+- Signup binds validated name/role to actual returned user ID/email. Concealed duplicate signup discards onboarding. Verified confirmation or confirmation-disabled usable sessions can insert a profile once; existing profiles and concurrent ROLE_ALREADY_SET win. Provider metadata never authorizes role assignment.
+- Existing profile/invite/accept routes now enforce CSRF before identity/provider work. Profile exact body remains first_name/role; role/name remain immutable. Invite acceptance/email/expiry/atomic first-parent rules are unchanged. Preview validates the invite separately and consumes matching continuation only after successful preview.
+- `src/middleware.ts` and auth context share verified identity/destination resolution for server redirects on login/signup/home/role/wait. Cookie changes accumulate across SDK writes, update downstream request cookies and reach redirect/error responses. Missing profile goes to role; unlinked student stays at wait; pending connect takes precedence only after profile selection. Public landing stays public. Mutation/callback adapters own their writes, preventing middleware provider work before mutation CSRF checks.
+- Existing `src/services/authz.ts`, profile routing, environment error handling and Supabase helpers were amended within backend ownership. Jules owns `src/lib/auth-client.ts` and all UI wiring; Theo did not edit that file. Legacy browser SDK helper has no role in the new server contract; UI retirement belongs to Jules.
+
+## Verification actually run
+
+- Final application typecheck: `node node_modules/typescript/bin/tsc --noEmit --incremental false` — exit 0 after final backend edits.
+- Scoped `git diff --check` — exit 0.
+- Focused run using `TSX_TSCONFIG_PATH=test/tsconfig.json`, Node experimental module mocks, process isolation and `tsx`, against Quinn's cookie-options/security/state/handlers suites: **53 tests passed; two suites failed to load** because their top-level await was compiled as CommonJS. The 53 passes include all 49 handler cases plus four cookie-option cases. This run preceded the final logout/configuration cleanup; Quinn must rerun against the frozen revision. No tests were edited by Theo.
+- The successful handler cases covered confirmation on/off, bound/mismatched intent, immutable profiles, shared sign-in cookies/CSRF, hostile continuation, neutral send responses, recovery isolation/replay/failure, Google correlation/disabled provider, refresh/logout and student gate behavior. They use controlled SDK/database fixtures, not a live provider.
+- No full suite, production build, browser layout proof, coverage claim or live-service verification was performed. Main retains the full-suite/build freeze gate.
+
+## Required external email configuration — not applied
+
+An authorized administrator must update Supabase Auth templates against the intended project's trusted Site URL. Required link bodies (literal Supabase template syntax):
+
+```html
+<!-- Confirm signup template -->
+<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&amp;type=signup">Confirm email</a>
+<!-- Reset password template -->
+<a href="{{ .SiteURL }}/auth/recovery?token_hash={{ .TokenHash }}&amp;type=recovery">Reset password</a>
+```
+
+Set Site URL to the same origin as configured NEXT_PUBLIC_APP_URL, without a trailing slash when using the links above. Allow that origin's `/auth/confirm`, `/auth/recovery`, and `/auth/callback` destinations (including callback flow/nonce query parameters as supported by provider configuration). Verify Google OAuth credentials/consent and the Supabase provider callback separately. Configure and verify **Supabase Auth SMTP/sender**; application Resend variables do not establish Auth delivery. Default ConfirmationURL/implicit-fragment links are not this contract: request fresh links after templates are corrected. No live delivery/confirmation/recovery success is claimed.
+
+## Remaining limits and review notes
+
+- Main reports a confirmed provider-project mismatch. No environment/provider/configuration change was made; implementation remains independent of that external correction. Dep's historic Google flag is not hardcoded.
+- Supabase's actual shared throttle keys/windows/numeric limits, mail/template/allowlist readiness and live schema remain externally unverified. There is no new distributed limiter. Provider 429 maps to RATE_LIMITED with conservative Retry-After 60 seconds; the SDK does not expose response headers through its typed auth errors. Client cooldown is UX only. No automatic application mutation retries were added.
+- Global sign-out failure is logged only as a safe constant and never prevents local logout. Password-update success still exits recovery if revocation fails. Already-issued access JWTs can remain usable until provider expiry; refresh revocation cannot retract them immediately.
+- Contract review note for main/Aria: the sealed migration marker uses the existing server key, so rotating that key also invalidates the marker and causes context migration to require reauthentication. This follows fail-closed migration hygiene but is broader than the contract's phrase that key rotation invalidates pending state only. No alternate secret or contract was invented.
+- Quinn owns test-loader repair, middleware/SDK-cookie integration and full regression evidence; Luna owns security review and eventual local commit. No approval to push/deploy this milestone is implied.
+
+Ready for frontend integration (frozen public contract), Quinn, and Luna. Backend files are handed back to main for freeze.
+
+## Integration reconciliation after Jules DONE
+
+- Authenticated `/login` and `/signup` pre-render redirects are already implemented: `src/middleware.ts:16` identifies auth routes, lines 21–25 validate identity/resolve destination, and line 44 emits the 303 before page rendering. This supersedes Jules's earlier observation; no additional redirect code was needed. Public `/` is excluded from auth-page redirect rules. Quinn's middleware fixture already covers a signed-in `/login` redirect and rotated/deleted cookies; add `/signup`, parent, linked/unlinked student, missing profile and pending-connect destinations against the same resolver.
+- Source-schema proof is conditional on a **chosen role**: `supabase/migrations/20261012120000_profiles.sql:14` requires `first_name IS NOT NULL` whenever role is nonnull. Lines 17–24 reject empty/space-only names. Line 54 rejects role changes in the identity-update trigger; line 77 grants the service role SELECT and INSERT only. Later checked-in migrations add no profile UPDATE grant or completion operation. `docs/ARIA_BLUEPRINT_v1.md:349` and the frozen recovery table specify insert-only POST `/api/profile`, returning 409 for an existing profile. No source-authorized missing-name UPDATE can be implemented without changing that contract/grants.
+- A source-compliant saved-role profile therefore cannot have a null/empty name. A live row that does is unverified/inconsistent data, not an invitation to overwrite saved identity. `src/data/profiles.ts` now raises typed `InvalidProfileError` (existing public `500 INTERNAL` envelope, safe constant message) for malformed saved names. All consumers share the data-boundary check: context, `/api/me`, profile POST, ordinary routing and role-specific API services. Such rows receive an integrity failure rather than a home redirect or unusable `/role` → 409 cycle. No row is updated, no role/name is overwritten and no migration was added. The existing client generic-error/retry states handle failed context before displaying role fields.
+- Important contract gap for main/Aria: SQL **does** permit an existing row with both role and first_name null. However, the source API cannot complete it: an existing-row POST is 409, the trigger rejects null-to-chosen-role UPDATE, and UPDATE is not granted. Supported application writers only insert a complete profile; a user with **no row** still completes `/role` through POST normally. Persisted null-role placeholder rows now also raise `InvalidProfileError`, preventing the permanent completion loop without claiming the schema forbids them. Supporting their repair requires an explicit Aria write-contract decision and separately authorized schema work; this implementation does not invent either.
+- Quinn-specific regression handoff: retain successful no-row onboarding and immutable complete-profile 409 cases; test parent/student rows with null, empty and whitespace-only names, plus persisted null-role placeholders, return safe INTERNAL errors on GET context, GET me and POST profile with zero inserts/updates and unchanged identity. Middleware must not redirect malformed profiles to home or role (its existing safe unavailable response applies). Test the actual data parser rather than mocking its validation away. The newly written test `schema-valid existing profile without name or role can finish onboarding exactly once` currently asserts an unsupported UPDATE; reconcile that expectation with Aria/main rather than weakening the trigger or adding an application-only fake success.
+- No UI or test file was edited. Live constraints/grants were not queried or changed. Backend follow-up consists only of the data-boundary integrity guard and this report; final verification follows below.

@@ -92,7 +92,7 @@ export async function pathAfterSignIn(user: SessionUser): Promise<string> {
     return "/role";
   }
   if (profile.role === "student") {
-    return "/wait";
+    return (await linkedStudent(profile)) ? "/home" : "/wait";
   }
   return "/home";
 }

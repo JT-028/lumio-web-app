@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Landing } from "@/components/landing";
 
 export const metadata: Metadata = {
-  title: "Sign in \u2014 Lumio",
+  title: "Grade 6 starts with family — Lumio",
 };
 
 export default function Page() {

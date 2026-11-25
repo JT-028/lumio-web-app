@@ -1,0 +1,231 @@
+(node:6760) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ the tagline is not hidden at 320px or 1280px, and reduced motion shows the wordmark (3.0244ms)
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ public landing and signed-in shell retain Lumio branding at both widths (251.4644ms)
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ role and the parent home do not render an owl, and wait is not the dashboard (217.497ms)
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ the role form offers parent and student and never offers teacher (50.2058ms)
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ a student with no parent is sent to /wait from /home (44.9735ms)
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ a signed-out visitor is not shown the waiting page (46.2664ms)
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ check again on /wait stays there and says the student is still waiting (94.4986ms)
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ check again leaves /wait when a parent is linked (79.3181ms)
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ a linked student sees the home regions and not the parent form (143.9826ms)
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ a parent with no child sees no child list, and a connect send shows one line (82.1283ms)
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+✔ a connect failure does not show a link (83.2201ms)
+✔ sign out returns to the dedicated login route (79.1625ms)
+(node:27700) ExperimentalWarning: Module mocking is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+✔ preview loading has real chrome, skeleton, no auth or accept (174.4008ms)
+✔ preview 404 has generic title and no form or accept (13.3855ms)
+✔ preview 410 has generic title and no form or accept (11.1902ms)
+✔ network preview failure focuses retry; retry repeats GET without accepting (34.9448ms)
+✔ expiry uses local date and time, and malformed expiry never renders raw data (15.7745ms)
+✔ signed-out accepted preview offers login only and never accepts (15.9803ms)
+✔ signed-out ignored preview offers login only and never accepts (15.1917ms)
+✔ existing role-less session goes to role and unlinked student stays for explicit accept (31.2384ms)
+✔ student may explicitly accept sent preview; duplicate clicks send one request (47.8572ms)
+✔ student may explicitly accept accepted preview; duplicate clicks send one request (47.4317ms)
+✔ student may explicitly accept ignored preview; duplicate clicks send one request (46.7447ms)
+✔ ignored acceptance stays with first parent and offers home (45.6703ms)
+✔ accept EMAIL_MISMATCH displays safe sentence and removes accept (32.3192ms)
+✔ accept ROLE_NOT_STUDENT displays safe sentence and removes accept (31.1884ms)
+✔ accept ALREADY_USED displays safe sentence and removes accept (31.1199ms)
+✔ accept LINK_EXPIRED displays safe sentence and removes accept (30.7358ms)
+✔ accept NOT_FOUND displays safe sentence and removes accept (31.7539ms)
+✔ known parent has no accept and a path to home (15.6449ms)
+✔ accept network error leaves retryable button; later 401 clears private preview (46.3622ms)
+✔ accept role-required goes to role without retaining preview or forwarding token (30.7283ms)
+✔ accepted navigation failure offers retry without another accept (46.8214ms)
+✔ parent home lists returned first names in order, including duplicates, at both widths (64.0723ms)
+✔ empty parent list remains empty after invite success (30.5327ms)
+✔ parent invite invalid email error is attached to and focuses the field (32.1559ms)
+✔ invite validation keeps a typed field independent of provider copy (0.8144ms)
+✔ parent invite 401 removes greeting, child list, and form before navigation (29.7735ms)
+✔ parent household error retries without a false empty list or invite form (30.7789ms)
+✔ parent home 401 clears private UI and follows guard (15.3093ms)
+✔ parent home 403 clears private UI and follows guard (16.2007ms)
+✔ linked student dashboard still reads only me and study names remain nonfunctional (16.2495ms)
+✔ waiting uses home on mount and Check again, stays waiting, then exits when linked (45.1862ms)
+✔ waiting guard UNAUTHENTICATED follows / (15.759ms)
+✔ waiting guard ROLE_REQUIRED follows /role (15.2611ms)
+✔ waiting guard parent follows /home (15.9006ms)
+✔ waiting network failure stays waiting and retry never assumes linked (30.8366ms)
+✔ client adapters discard private fields and reject malformed success (1.1416ms)
+✔ a departed waiting screen cannot redirect the new connect screen (45.6806ms)
+✔ a departed connect screen cannot navigate after its accept resolves (63.8567ms)
+✔ a departed parent form cannot redirect after an invite rejection resolves (61.79ms)
+✔ parent invite repeated form submissions send once while pending and clear only after success (62.7823ms)
+✔ parent blank and non-Gmail errors focus the described field without sending (46.2886ms)
+✔ parent household read that now identifies a student redirects with needs_parent=true before rendering private parent UI (14.5916ms)
+✔ parent household read that now identifies a student redirects with needs_parent=false before rendering private parent UI (15.1344ms)
+✔ malformed child data fails the whole household read, focuses retry, and never paints a partial list (16.7769ms)
+✔ malformed acceptance stays retryable without navigating or printing response details (46.5181ms)
+✔ malformed invite success remains a fixed failure and preserves the address for retry (32.0574ms)
+✔ Strict Mode waiting effect restart releases its request lock and ignores the obsolete completion (45.2319ms)
+ℹ tests 59
+ℹ suites 0
+ℹ pass 59
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5698.4789

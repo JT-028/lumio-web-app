@@ -39,6 +39,9 @@ for (const [key, value] of Object.entries(globals)) {
 dom.location.replace = (url: string | URL) => {
   navigations.push(String(url));
 };
+dom.location.assign = (url: string | URL) => {
+  navigations.push(String(url));
+};
 
 const style = dom.document.createElement("style");
 style.textContent = readFileSync(new URL("../../src/app/globals.css", import.meta.url), "utf8");

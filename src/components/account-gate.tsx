@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { Me } from "@/domain/types";
-import { getMe, pathForAccount } from "@/lib/lumio-client";
+import { getMe } from "@/lib/lumio-client";
+import { readAuthContext } from "@/lib/auth-client";
 import { Lines, Shell } from "@/components/shell";
 
 type GateState =
@@ -33,27 +34,29 @@ export function AccountGate({
     let cancelled = false;
     void (async () => {
       setState({ kind: "loading" });
+      const { context } = await readAuthContext();
+      if (cancelled) return;
+      if (!context.authenticated) {
+        window.location.replace("/login"); setState({ kind: "redirecting" }); return;
+      }
+      if (context.next !== here && context.next) {
+        window.location.replace(context.next); setState({ kind: "redirecting" }); return;
+      }
       const result = await getMe();
       if (cancelled) {
         return;
       }
       if (!result.ok) {
         if (result.status === 401) {
-          window.location.replace("/");
+          window.location.replace("/login");
           setState({ kind: "redirecting" });
           return;
         }
         setState({ kind: "error" });
         return;
       }
-      const next = pathForAccount(result.me);
-      if (next !== here) {
-        window.location.replace(next);
-        setState({ kind: "redirecting" });
-        return;
-      }
       setState({ kind: "ready", me: result.me });
-    })();
+    })().catch(() => { if (!cancelled) setState({ kind: "error" }); });
     return () => {
       cancelled = true;
     };

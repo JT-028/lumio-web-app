@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { beforeEach, mock, test } from "node:test";
 import { emailKey } from "../src/domain/email-key.ts";
-import { cookieJar, cookies, resetCookies } from "./support/cookies.ts";
+import { cookieJar, cookies, mutationHeaders, resetCookies } from "./support/cookies.ts";
 
 type Row = Record<string, unknown>;
-type Account = { id: string; email: string };
+type Account = { id: string; email: string; email_confirmed_at: string };
 
 const OFFICIAL: [string, number][] = [
   ["geography_6", 1],
@@ -82,7 +82,7 @@ function resetRows(): void {
 }
 
 function signIn(id: string, email: string): void {
-  accounts.set(id, { id, email });
+  accounts.set(id, { id, email, email_confirmed_at: "2026-10-01T00:00:00Z" });
   cookieJar.length = 0;
   cookieJar.push({ name: "sb-access-token", value: id });
 }
@@ -318,6 +318,8 @@ function ensureCards(studentId: string): void {
 }
 
 beforeEach(() => {
+  process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3010";
+  process.env.SUPABASE_SECRET_KEY = "synthetic-key";
   accounts.clear();
   resetCookies();
   resetRows();
@@ -337,8 +339,8 @@ async function postAccept(token: string, body?: unknown): Promise<Response> {
   return POST(
     new Request(`http://localhost:3010/api/connect/${token}/accept`, {
       method: "POST",
-      headers: body === undefined ? undefined : { "content-type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: mutationHeaders(),
+      body: JSON.stringify(body ?? {}),
     }),
     context(token),
   );

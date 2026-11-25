@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { beforeEach, mock, test } from "node:test";
-import { cookieJar, cookies, rememberSetCookie, resetCookies } from "./support/cookies.ts";
+import { cookieJar, cookies, mutationHeaders, rememberSetCookie, resetCookies } from "./support/cookies.ts";
 import { createAdminClient, inserts, profiles, resetProfiles } from "./support/memory-db.ts";
 
-type Account = { id: string; email: string };
+type Account = { id: string; email: string; email_confirmed_at: string };
 
 const accounts = new Map<string, Account>();
 
@@ -27,12 +27,12 @@ mock.module("@/lib/supabase/cookie-client", {
             if (code !== "google-code") {
               return { data: { session: null, user: null }, error: { message: "bad code" } };
             }
-            memory = { id: userId(1), email: "ada@gmail.com" };
+            memory = { id: userId(1), email: "ada@gmail.com", email_confirmed_at: "2026-10-01T00:00:00Z" };
             accounts.set(memory.id, memory);
             options.setAll(
               [
                 {
-                  name: "sb-access-token",
+                  name: "sb-fixture-auth-token",
                   value: memory.id,
                   options: { path: "/", httpOnly: true, sameSite: "lax", secure: false },
                 },
@@ -48,7 +48,7 @@ mock.module("@/lib/supabase/cookie-client", {
             if (memory) {
               return { data: { user: memory }, error: null };
             }
-            const token = options.getAll().find((cookie) => cookie.name === "sb-access-token")?.value;
+            const token = options.getAll().find((cookie) => cookie.name === "sb-fixture-auth-token")?.value;
             const user = token ? accounts.get(token) : undefined;
             if (!user) {
               return { data: { user: null }, error: { message: "Auth session missing" } };
@@ -57,7 +57,7 @@ mock.module("@/lib/supabase/cookie-client", {
           },
           async signOut() {
             memory = null;
-            options.setAll([{ name: "sb-access-token", value: "", options: { path: "/", maxAge: 0 } }], {});
+            options.setAll([{ name: "sb-fixture-auth-token", value: "", options: { path: "/", maxAge: 0 } }], {});
             return { error: null };
           },
         },
@@ -71,12 +71,16 @@ function userId(n: number): string {
 }
 
 function signIn(id: string, email: string): void {
-  accounts.set(id, { id, email });
+  accounts.set(id, { id, email, email_confirmed_at: "2026-10-01T00:00:00Z" });
   cookieJar.length = 0;
-  cookieJar.push({ name: "sb-access-token", value: id });
+  cookieJar.push({ name: "sb-fixture-auth-token", value: id });
 }
 
 beforeEach(() => {
+  process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3010";
+  process.env.SUPABASE_SECRET_KEY = "synthetic-key";
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://provider.example.test";
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "synthetic-public-key";
   accounts.clear();
   resetCookies();
   resetProfiles();
@@ -87,7 +91,7 @@ async function postProfile(body: unknown): Promise<Response> {
   return POST(
     new Request("http://localhost:3010/api/profile", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: mutationHeaders(),
       body: JSON.stringify(body),
     }),
   );
@@ -112,26 +116,21 @@ function assertEnvelope(body: { error?: Record<string, unknown> }): {
   return error as { code: string; message: string; details: { field?: string } | null };
 }
 
-test("Google callback does not insert a profile, and the session still resolves on a second read", async () => {
+test("uncorrelated Google callback does not insert a profile or create a session", async () => {
   const { GET } = await import("../src/app/auth/callback/route.ts");
   const response = await GET(new Request("http://localhost:3010/auth/callback?code=google-code"));
-  assert.equal(response.headers.get("location"), "http://localhost:3010/role");
-  assert.equal(inserts.length, 0);
-  assert.equal(profiles.length, 0);
+  assert.equal(response.status, 303);
+  assert.match(response.headers.get("location") ?? "", /login\?error=auth$/);
+  assert.equal(inserts.length, 0); assert.equal(profiles.length, 0);
   rememberSetCookie(response);
-  assert.equal(cookieJar.some((cookie) => cookie.value === userId(1)), true);
+  assert.equal(cookieJar.some(cookie => cookie.name === "sb-fixture-auth-token"), false);
+});
 
-  const first = await getMe();
-  const firstBody = (await first.json()) as Record<string, unknown>;
-  const second = await getMe();
-  const secondBody = (await second.json()) as Record<string, unknown>;
-  assert.equal(first.status, 200);
-  assert.equal(second.status, 200);
-  assert.equal(firstBody.role, null);
-  assert.deepEqual(secondBody, firstBody);
-  assert.equal(secondBody.has_main_parent, false);
-  assert.equal(inserts.length, 0);
-  assert.match(first.headers.get("cache-control") ?? "", /no-store/);
+test("verified session resolves consistently on repeated API reads", async () => {
+  signIn(userId(1), "ada@gmail.com");
+  const first = await getMe(); const second = await getMe();
+  assert.equal(first.status, 200); assert.equal(second.status, 200);
+  assert.deepEqual(await first.json(), await second.json()); assert.equal(inserts.length, 0);
 });
 
 test("POST /api/profile accepts parent and student once", async () => {
@@ -269,8 +268,9 @@ test("an unlinked student resolves to /wait, including when the guide route does
 test("POST /api/sign-out clears the session so the next read is 401", async () => {
   signIn(userId(70), "ada@example.com");
   const { POST } = await import("../src/app/api/sign-out/route.ts");
-  const signedOut = await POST(new Request("http://localhost:3010/api/sign-out", { method: "POST" }));
+  const signedOut = await POST(new Request("http://localhost:3010/api/sign-out", { method: "POST", headers: mutationHeaders(), body: "{}" }));
   assert.equal(signedOut.status, 204);
+  rememberSetCookie(signedOut);
   const me = await getMe();
   const error = assertEnvelope((await me.json()) as { error: Record<string, unknown> });
   assert.equal(me.status, 401);

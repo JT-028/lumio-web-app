@@ -3,8 +3,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { findProfileById } from "@/data/profiles";
 import { emailKey, sessionEmail } from "@/domain/email-key";
 import type { Role, SessionUser } from "@/domain/types";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { clearServerAuthCookies, createSupabaseServerClient } from "@/lib/supabase/server";
 import { AppError } from "@/services/errors";
+import { providerFailure } from "@/services/auth";
 
 export type ParentCaller = {
   id: string;
@@ -29,7 +30,8 @@ const UUID =
 
 export async function requireUser(request: Request): Promise<SessionUser> {
   const supabase = await createSupabaseServerClient(request);
-  return userFromClient(supabase);
+  try { return await userFromClient(supabase); }
+  catch (error) { await clearServerAuthCookies(); throw error; }
 }
 
 export async function endSession(request: Request): Promise<SessionUser> {
@@ -43,12 +45,19 @@ export async function endSession(request: Request): Promise<SessionUser> {
 }
 
 export async function userFromClient(supabase: SupabaseClient): Promise<SessionUser> {
-  const { data, error } = await supabase.auth.getUser();
+  let result;
+  try { result = await supabase.auth.getUser(); }
+  catch (error) { throw providerFailure(error); }
+  const { data, error } = result;
+  if (error && (error.status === 429 || (error.status ?? 0) >= 500)) throw providerFailure(error);
   if (error || !data.user) {
     throw new AppError("UNAUTHENTICATED", 401, "Sign in is required.", null);
   }
   if (!UUID.test(data.user.id)) {
     throw new AppError("INTERNAL", 500, "Something went wrong.", null);
+  }
+  if (!data.user.email_confirmed_at) {
+    throw new AppError("EMAIL_UNCONFIRMED", 403, "Confirm your email before signing in.");
   }
   const email = sessionEmail(data.user.email);
   if (!email || !emailKey(email)) {

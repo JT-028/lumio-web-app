@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import type { ConnectPreview, Me } from "@/domain/types";
 import { getMe } from "@/lib/lumio-client";
-import { acceptConnect, connectExpiry, getConnectPreview } from "@/lib/m2-client";
+import { connectExpiry, getConnectPreview } from "@/lib/m2-client";
+import { AuthFailure, authPost, readAuthContext } from "@/lib/auth-client";
 import { Lines, Shell } from "@/components/shell";
 import { ConnectAuth } from "@/components/connect-auth";
 
@@ -34,23 +35,18 @@ export function ConnectScreen({ token }: { token: string }) {
   useEffect(() => { if (screen.kind === "error") retry.current?.focus(); }, [screen]);
   useEffect(() => { if (status) statusRef.current?.focus(); }, [status]);
 
-  function session(me: Me) {
-    if (!me.role || !me.first_name?.trim()) {
-      setScreen({ kind: "redirecting" });
-      window.location.replace("/role");
-      return;
-    }
-    setScreen((v) => v.kind === "ready" ? { ...v, me } : v);
-  }
-
   useEffect(() => {
     let cancelled = false;
     lock.current = false; setBusy(false);
     setScreen({ kind: "loading" }); setStatus(""); setOutcome("ready");
     void (async () => {
+      await readAuthContext();
+      if (cancelled) return;
       const [preview, account] = await Promise.all([getConnectPreview(token), getMe()]);
       if (cancelled) return;
       if (account.ok && (!account.me.role || !account.me.first_name?.trim())) {
+        await authPost("/api/auth/intent", { continuation: `/connect/${token}` });
+        if (cancelled) return;
         setScreen({ kind: "redirecting" }); window.location.replace("/role"); return;
       }
       if (!preview.ok) {
@@ -59,7 +55,7 @@ export function ConnectScreen({ token }: { token: string }) {
       }
       if (!account.ok && account.status !== 401) { setScreen({ kind: "error" }); return; }
       setScreen({ kind: "ready", preview: preview.data, me: account.ok ? account.me : null });
-    })();
+    })().catch(() => { if (!cancelled) setScreen({ kind: "error" }); });
     return () => { cancelled = true; generation.current += 1; };
   }, [token, attempt]);
 
@@ -74,7 +70,17 @@ export function ConnectScreen({ token }: { token: string }) {
     if (lock.current || screen.kind !== "ready" || screen.me?.role !== "student") return;
     const current = generation.current;
     lock.current = true; setBusy(true); setStatus("");
-    const result = await acceptConnect(token);
+    let result: { ok: true; data: "accepted" | "ignored" } | { ok: false; code: string; status: number };
+    try {
+      const body = await authPost(`/api/connect/${encodeURIComponent(token)}/accept`, {});
+      if (body.state !== "accepted" && body.state !== "ignored") throw new AuthFailure("INTERNAL");
+      result = { ok: true, data: body.state };
+    } catch (error) {
+      const code = error instanceof AuthFailure ? error.code : "";
+      result = { ok: false, code, status: error instanceof AuthFailure ? error.status : 0 };
+    } finally {
+      if (current === generation.current) { lock.current = false; setBusy(false); }
+    }
     if (current !== generation.current) return;
     lock.current = false; setBusy(false);
     if (result.ok) {
@@ -88,7 +94,11 @@ export function ConnectScreen({ token }: { token: string }) {
     }
     if (result.status === 401 || (result.status === 403 && result.code === "ROLE_REQUIRED")) {
       setScreen({ kind: "redirecting" });
-      window.location.replace(result.status === 401 ? "/" : "/role"); return;
+      try {
+        await authPost("/api/auth/intent", { continuation: `/connect/${token}` });
+        if (current === generation.current) window.location.replace(result.status === 401 ? "/login" : "/role");
+      } catch { if (current === generation.current) { setScreen({ kind: "error" }); setStatus("We couldn’t continue. Try again."); } }
+      return;
     }
     if (result.code === "EMAIL_MISMATCH") {
       setOutcome("mismatch"); setStatus("You are signed in as the wrong address. You are not linked. Sign out, then sign in with the Gmail on this page.");
@@ -124,9 +134,10 @@ export function ConnectScreen({ token }: { token: string }) {
             {!ready.me ? <>
               {ready.preview.state === "accepted" ? <p className="body-copy">This link was already used. Sign in with that Gmail if it is yours. This page does not connect anyone new.</p> : null}
               {ready.preview.state === "ignored" ? <p className="body-copy">This link does not connect anyone. The student stays with the first parent.</p> : null}
-              <ConnectAuth invitedEmail={ready.preview.invited_email} allowCreate={ready.preview.state === "sent"} onSession={session} />
+              <ConnectAuth token={token} allowCreate={ready.preview.state === "sent"} />
             </> : <>
               {ready.me.role === "parent" ? <p className="body-copy">{PARENT}</p> : null}
+              {ready.me.role === "parent" || outcome === "mismatch" || outcome === "parent" ? <ConnectAuth token={token} allowCreate={false} switchAccount /> : null}
               {ready.me.role === "student" && outcome === "ready" ? <button className="button-primary" type="button" disabled={busy} onClick={() => void accept()}>{busy ? "Accepting…" : "Accept this link"}</button> : null}
               <p ref={statusRef} className="status" aria-live="polite" tabIndex={-1}>{status}</p>
               {outcome === "accepted" ? <button className="button-primary" type="button" onClick={openWait}>Try again</button> : null}

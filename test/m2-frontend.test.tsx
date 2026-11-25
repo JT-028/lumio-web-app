@@ -19,28 +19,7 @@ let emptyIdentities: boolean;
 let throwAuth: boolean;
 let oauthUrl: string | null;
 const authCalls: { name: string; args: unknown }[] = [];
-mock.module("@/lib/supabase/browser", { exports: {
-  browserSupabase: () => ({ auth: {
-    async signInWithPassword(args: unknown) {
-      authCalls.push({ name: "signin", args });
-      if (throwAuth) throw new Error(fixture);
-      if (!authError) me = sessionAfterAuth;
-      return { error: authError };
-    },
-    async signUp(args: unknown) {
-      authCalls.push({ name: "signup", args });
-      if (throwAuth) throw new Error(fixture);
-      if (signUpSession) me = sessionAfterAuth;
-      return { error: authError, data: { user: { identities: emptyIdentities ? [] : [{}] }, session: signUpSession ? {} : null } };
-    },
-    async signInWithOAuth(args: unknown) {
-      authCalls.push({ name: "google", args });
-      if (throwAuth) throw new Error(fixture);
-      return { error: authError, data: { url: oauthUrl } };
-    },
-    async signOut() {},
-  } }),
-} });
+mock.module("@/lib/supabase/browser", { exports: { browserSupabase() { throw new Error("browser auth retired"); } } });
 mock.module("next/navigation", { exports: { useParams: () => ({ token: fixture }) } });
 
 type Reply = { status: number; body?: unknown; network?: boolean };
@@ -60,6 +39,10 @@ function response(reply: Reply) {
 }
 globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input); calls.push({ url, init });
+  if (url === "/api/auth/context") return new Response(JSON.stringify({ authenticated: !!me,
+    next: me ? !me.role ? "/role" : me.role === "student" && !me.has_main_parent ? "/wait" : "/home" : null,
+    onboarding: null, has_continuation: false, link: "none" }), { headers: { "X-CSRF-Token": "c".repeat(43) } });
+  if (url === "/api/auth/intent") return Response.json({ status: "ready" });
   if (url === "/api/me") {
     const reply = me ? { status: 200, body: me } : { status: 401 };
     if (holdMe) await holdMe;
@@ -109,18 +92,13 @@ async function submit() {
   await settle();
 }
 async function input(id: string, value: string) { await typeInto(document.getElementById(id) as HTMLInputElement, value); }
-async function credentials(create = false) {
-  if (create) await click("Create account");
-  await input("connect-password", "test-password");
-  if (create) await input("connect-confirm", "test-password");
-}
 const accepts = () => calls.filter((c) => c.url.endsWith("/accept"));
 function noLeaks() {
   assert.ok(!document.body.innerHTML.includes(fixture));
   assert.ok(!document.body.innerHTML.includes(privateValue));
   assert.ok(!document.title.includes(fixture));
   assert.ok(!JSON.stringify(authCalls).includes(fixture));
-  assert.ok(navigations.every((path) => ["/", "/role", "/wait", "/home"].includes(path)));
+  assert.ok(navigations.every((path) => ["/", "/login", "/signup", "/role", "/wait", "/home"].includes(path)));
 }
 beforeEach(() => {
   navigations.length = 0; calls.length = 0; authCalls.length = 0;
@@ -141,7 +119,7 @@ test("preview loading has real chrome, skeleton, no auth or accept", async () =>
   assert.ok(document.querySelector('.skeleton'));
   assert.equal(document.querySelector("main")?.getAttribute("aria-busy"), "true");
   assert.match(text(), /Learn\. Grow\. Level Up\./); assert.equal(document.querySelector("form"), null);
-  release(); await settle(); assert.ok(document.querySelector("form"));
+  release(); await settle(); assert.ok(document.querySelector('a[href="/login"]'));
 });
 
 for (const [status, message] of [[404, "This connect link could not be found."], [410, "This link has expired."]] as const) {
@@ -159,7 +137,7 @@ test("network preview failure focuses retry; retry repeats GET without accepting
   assert.match(text(), /This page could not be loaded/); assert.equal(document.activeElement, button("Try again"));
   previewReply = { status: 200, body: preview }; await click("Try again");
   assert.equal(calls.filter((c) => c.url.startsWith("/api/connect/")).length, 2);
-  assert.equal(accepts().length, 0); assert.equal((document.getElementById("connect-email") as HTMLInputElement).value, "lin@gmail.com");
+  assert.equal(accepts().length, 0); assert.ok(document.querySelector('a[href="/login"]'));
 });
 test("expiry uses local date and time, and malformed expiry never renders raw data", async () => {
   assert.equal(connectExpiry(preview.expires_at), `This link lasts until ${new Date(preview.expires_at).toLocaleString()}. Links last 7 days.`);
@@ -167,87 +145,23 @@ test("expiry uses local date and time, and malformed expiry never renders raw da
   await render(<ConnectScreen token={fixture} />);
   assert.match(text(), /This link has an end time, and the date could not be shown/);
 });
+// Dedicated auth validation, confirmation, errors and Google regressions now live
+// in auth-recovery-ui.test.tsx; connect itself hands off through sealed intent.
 for (const state of ["accepted", "ignored"]) {
-  test(`signed-out ${state} preview allows sign-in and Google, never create`, async () => {
+  test(`signed-out ${state} preview offers login only and never accepts`, async () => {
     previewReply = { status: 200, body: { ...preview, state } };
     await render(<ConnectScreen token={fixture} />);
-    button("Continue with Google"); assert.ok(buttons().some((b) => b.textContent === "Sign in"));
-    assert.ok(!buttons().some((b) => b.textContent === "Create account")); assert.equal(accepts().length, 0);
+    assert.ok(document.querySelector('a[href="/login"]'));
+    assert.equal(document.querySelector('a[href="/signup"]'), null);
+    assert.equal(accepts().length, 0);
   });
 }
-test("signup password mismatch and missing fields focus errors without auth", async () => {
-  await render(<ConnectScreen token={fixture} />); await click("Create account");
-  await input("connect-email", ""); await submit();
-  assert.equal(document.activeElement?.id, "connect-email"); assert.match(text(), /Enter your email/);
-  await input("connect-email", "bad"); await submit(); assert.match(text(), /Enter a valid email address/);
-  await input("connect-email", "lin@gmail.com"); await input("connect-password", "one"); await input("connect-confirm", "two");
-  await submit(); assert.match(text(), /Those passwords do not match/);
-  assert.equal(document.activeElement?.id, "connect-confirm"); assert.equal(authCalls.length, 0);
-});
-test("signup awaiting confirmation stays on link and sends no role, return, or accept", async () => {
-  await render(<ConnectScreen token={fixture} />); await credentials(true); await submit();
-  assert.match(text(), /Then come back to this page and sign in/); assert.deepEqual(navigations, []);
-  assert.deepEqual(authCalls, [{ name: "signup", args: { email: "lin@gmail.com", password: "test-password", options: { emailRedirectTo: "http://localhost:3010/auth/callback" } } }]);
-  assert.equal(accepts().length, 0);
-});
-test("signup with session and no role leaves for role without token or profile write", async () => {
-  sessionAfterAuth = { ...student, role: null, first_name: null }; signUpSession = true;
-  await render(<ConnectScreen token={fixture} />); await credentials(true); await submit();
-  assert.deepEqual(navigations, ["/role"]); assert.equal(document.querySelector("form"), null);
-  assert.equal(accepts().length, 0); assert.ok(!calls.some((c) => c.url === "/api/profile"));
-});
-for (const role of ["parent", "student"] as const) {
-  test(`signup with existing ${role} role opens explicit connect state`, async () => {
-    sessionAfterAuth = role === "parent" ? parent : student; signUpSession = true;
-    await render(<ConnectScreen token={fixture} />); await credentials(true); await submit();
-    if (role === "student") button("Accept this link");
-    else { assert.match(text(), /A parent account cannot accept/); button("Go to home"); }
-    assert.equal(accepts().length, 0); assert.deepEqual(navigations, []);
-  });
-}
-test("successful auth without a readable session remains generic and never accepts", async () => {
-  sessionAfterAuth = null;
-  await render(<ConnectScreen token={fixture} />); await credentials(); await submit();
-  assert.match(text(), /Sign-in did not finish/); assert.equal(accepts().length, 0);
-});
-test("existing session without role goes to role; unlinked student can stay on connect", async () => {
+
+test("existing role-less session goes to role and unlinked student stays for explicit accept", async () => {
   me = { ...student, role: null, first_name: null }; await render(<ConnectScreen token={fixture} />);
   assert.deepEqual(navigations, ["/role"]); navigations.length = 0;
   me = student; await render(<ConnectScreen token={fixture} />); button("Accept this link");
   assert.deepEqual(navigations, []); assert.equal(accepts().length, 0);
-});
-test("sign-in keeps student on connect until explicit acceptance; edited email is only auth input", async () => {
-  await render(<ConnectScreen token={fixture} />); await credentials(); await input("connect-email", "other@gmail.com"); await submit();
-  button("Accept this link"); assert.equal(accepts().length, 0); assert.deepEqual(navigations, []);
-  await click("Accept this link"); assert.deepEqual(navigations, ["/wait"]);
-  assert.equal(accepts().length, 1); assert.equal(accepts()[0].init?.body, undefined);
-  assert.equal(accepts()[0].init?.method, "POST");
-});
-for (const error of ["invalid_credentials", "email_not_confirmed", "unknown"]) {
-  test(`sign-in maps ${error} without provider message`, async () => {
-    authError = { code: error, message: fixture };
-    await render(<ConnectScreen token={fixture} />); await credentials(); await submit();
-    assert.ok(text().includes(error === "invalid_credentials" ? "That email and password do not match." : error === "email_not_confirmed" ? "Confirm your email first" : "Sign-in did not finish."));
-    assert.equal((document.getElementById("connect-password") as HTMLInputElement).value, "");
-    assert.equal((document.getElementById("connect-email") as HTMLInputElement).value, "lin@gmail.com");
-  });
-}
-for (const kind of ["registered", "identities", "password"]) {
-  test(`signup ${kind} maps safely and preserves email`, async () => {
-    if (kind === "identities") emptyIdentities = true;
-    else authError = { code: kind === "registered" ? "user_already_exists" : "weak_password", message: fixture };
-    await render(<ConnectScreen token={fixture} />); await credentials(true); await submit();
-    if (kind === "password") assert.match(text(), /That password was not accepted/);
-    else { assert.match(text(), /That email is already registered/); await click("Sign in instead"); assert.equal(document.getElementById("connect-confirm"), null); }
-    assert.equal((document.getElementById("connect-email") as HTMLInputElement).value, "lin@gmail.com");
-    assert.equal(accepts().length, 0);
-  });
-}
-test("Google reuses callback exactly; missing OAuth URL and thrown auth stay generic", async () => {
-  oauthUrl = null; await render(<ConnectScreen token={fixture} />); await click("Continue with Google");
-  assert.match(text(), /Google sign-in did not finish/);
-  assert.deepEqual(authCalls[0], { name: "google", args: { provider: "google", options: { redirectTo: "http://localhost:3010/auth/callback" } } });
-  throwAuth = true; await credentials(); await submit(); assert.match(text(), /Sign-in did not finish/); assert.equal(accepts().length, 0);
 });
 
 for (const state of ["sent", "accepted", "ignored"]) {
@@ -290,7 +204,7 @@ test("accept network error leaves retryable button; later 401 clears private pre
   await render(<ConnectScreen token={fixture} />); await click("Accept this link");
   assert.match(text(), /This link could not be accepted/); button("Accept this link");
   acceptReply = { status: 401 }; await click("Accept this link");
-  assert.deepEqual(navigations, ["/"]); assert.doesNotMatch(text(), /lin@gmail|Ada sent/);
+  assert.deepEqual(navigations, ["/login"]); assert.doesNotMatch(text(), /lin@gmail|Ada sent/);
 });
 test("accept role-required goes to role without retaining preview or forwarding token", async () => {
   me = student; acceptReply = { status: 403, body: { error: { code: "ROLE_REQUIRED", message: fixture } } };
@@ -345,7 +259,7 @@ test("parent invite 401 removes greeting, child list, and form before navigation
   me = parent; homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [{ first_name: "Zoe" }] } };
   inviteReply = { status: 401 };
   await render(<HomeScreen />); await input("child-gmail", "child@gmail.com"); await submit();
-  assert.deepEqual(navigations, ["/"]); assert.doesNotMatch(text(), /Hello, Ada|Zoe|Connect a child/);
+  assert.deepEqual(navigations, ["/login"]); assert.doesNotMatch(text(), /Hello, Ada|Zoe|Connect a child/);
 });
 test("parent household error retries without a false empty list or invite form", async () => {
   me = parent; homeReply = { status: 503 };
@@ -417,16 +331,6 @@ test("a departed connect screen cannot navigate after its accept resolves", asyn
   assert.deepEqual(navigations, []);
 });
 
-test("a departed auth form cannot redirect after its profile read resolves", async () => {
-  sessionAfterAuth = { ...student, role: null, first_name: null };
-  await render(<ConnectScreen token={fixture} />); await credentials();
-  let release!: () => void; holdMe = new Promise((r) => { release = r; });
-  await submit(); await render(<WaitScreen />);
-  release(); await settle();
-  assert.match(text(), /Waiting for a parent/);
-  assert.deepEqual(navigations, []);
-});
-
 test("a departed parent form cannot redirect after an invite rejection resolves", async () => {
   me = parent; homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [] } };
   await render(<HomeScreen />); await input("child-gmail", "child@gmail.com");
@@ -468,31 +372,8 @@ test("parent blank and non-Gmail errors focus the described field without sendin
   assert.equal(calls.filter((call) => call.url === "/api/invites").length, 0);
 });
 
-test("repeated connect sign-in submits authenticate once while the account read is pending", async () => {
-  await render(<ConnectScreen token={fixture} />); await credentials();
-  let release!: () => void; holdMe = new Promise((r) => { release = r; });
-  await submit(); await submit();
-  assert.equal(button("Signing in…").disabled, true);
-  assert.equal(authCalls.length, 1);
-  assert.equal(document.querySelector("form")?.getAttribute("aria-busy"), "true");
-  release(); await settle();
-  button("Accept this link"); assert.equal(accepts().length, 0);
-});
-
-test("signup without role requires reopening the link after choosing student and still needs explicit accept", async () => {
-  sessionAfterAuth = { ...student, role: null, first_name: null }; signUpSession = true;
-  await render(<ConnectScreen token={fixture} />); await credentials(true); await submit();
-  assert.deepEqual(navigations, ["/role"]); assert.equal(accepts().length, 0);
-  me = student; navigations.length = 0;
-  await render(<WaitScreen />);
-  assert.match(text(), /Waiting for a parent/); assert.equal(accepts().length, 0);
-  await render(<ConnectScreen token={fixture} />);
-  button("Accept this link"); assert.deepEqual(navigations, []); assert.equal(accepts().length, 0);
-  await click("Accept this link");
-  assert.deepEqual(navigations, ["/wait"]);
-  assert.equal(accepts().length, 1); assert.equal(accepts()[0].init?.body, undefined);
-  assert.ok(!calls.some((call) => call.url === "/api/profile"));
-});
+// Duplicate/stale auth submissions are covered on the shared AuthScreen. The
+// connect handoff regressions below ensure continuation, not manual reopening.
 
 for (const needs_parent of [true, false]) {
   test(`parent household read that now identifies a student redirects with needs_parent=${needs_parent} before rendering private parent UI`, async () => {

@@ -6,6 +6,7 @@ export function sessionCookieOptions(secure: boolean): CookieOptions {
     sameSite: "lax",
     httpOnly: true,
     secure,
+    maxAge: 604800,
   };
 }
 
@@ -20,33 +21,19 @@ type NextCookieOptions = {
 };
 
 export function toNextCookieOptions(options: CookieOptions): NextCookieOptions {
-  let sameSite: NextCookieOptions["sameSite"] = "lax";
-  if (
-    options.sameSite === "lax" ||
-    options.sameSite === "strict" ||
-    options.sameSite === "none"
-  ) {
-    sameSite = options.sameSite;
-  } else if (options.sameSite === true) {
-    sameSite = "strict";
-  }
-
   const next: NextCookieOptions = {
-    httpOnly: options.httpOnly ?? true,
-    path: options.path,
-    sameSite,
+    httpOnly: true,
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production" || options.secure === true,
   };
-  if (options.domain) {
-    next.domain = options.domain;
-  }
   if (options.expires instanceof Date) {
     next.expires = options.expires;
   }
   if (typeof options.maxAge === "number") {
-    next.maxAge = options.maxAge;
-  }
-  if (typeof options.secure === "boolean") {
-    next.secure = options.secure;
+    next.maxAge = Math.min(604800, Math.max(0, options.maxAge));
+  } else {
+    next.maxAge = 604800;
   }
   return next;
 }

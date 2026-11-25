@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { childGmailError } from "@/lib/form-checks";
-import { postInvite } from "@/lib/lumio-client";
+import { AuthFailure, authPost } from "@/lib/auth-client";
 import { AccountGate } from "@/components/account-gate";
 import { Lines, Shell } from "@/components/shell";
 import { StudentHome } from "@/components/student-home";
@@ -89,14 +89,31 @@ function HomeForm({ home }: { home: HouseholdHome }) {
     setStatus("");
     setSending(true);
     sendLock.current = true;
-    const result = await postInvite(email.trim());
+    let result: { ok: true; invited_email: string } | { ok: false; status: number; message: string; field: string | null };
+    try {
+      const body = await authPost("/api/invites", { invited_email: email.trim() });
+      if (typeof body.invited_email !== "string" || !body.invited_email.trim() || body.invited_email.includes("://") || /\s/.test(body.invited_email)) throw new AuthFailure("INTERNAL");
+      result = { ok: true, invited_email: body.invited_email };
+    } catch (error) {
+      const code = error instanceof AuthFailure ? error.code : "";
+      const messages: Record<string, string> = {
+        INVALID_EMAIL: "Enter a Gmail address ending in @gmail.com or @googlemail.com.",
+        ROLE_FORBIDDEN: "Only a parent can send a connect email.",
+        RATE_LIMITED: "You have sent too many connect emails this hour. Wait and try again.",
+        EMAIL_FAILED: "The connect email could not be sent. Nothing was saved. Try again.",
+        EMAIL_NOT_CONFIGURED: "Connect email is not set up yet. Nothing was sent, and no link is shown.",
+      };
+      result = { ok: false, status: error instanceof AuthFailure ? error.status : 0, message: messages[code] ?? "The connect email could not be sent. Try again.", field: code === "INVALID_EMAIL" ? "invited_email" : null };
+    } finally {
+      if (current === generation.current) { sendLock.current = false; setSending(false); }
+    }
     if (current !== generation.current) return;
     if (!result.ok) {
       if (result.status === 401) {
         setEmail("");
         setStatus("");
         setLeaving(true);
-        window.location.replace("/");
+        window.location.replace("/login");
         return;
       }
       setSending(false);

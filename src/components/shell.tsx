@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { browserSupabase } from "@/lib/supabase/browser";
-import { postSignOut } from "@/lib/lumio-client";
+import { authPost } from "@/lib/auth-client";
 
 function useDisplayFont() {
   useEffect(() => {
@@ -51,6 +50,8 @@ export function useSignOut() {
   const [signOutError, setSignOutError] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   const busy = useRef(false);
+  const generation = useRef(0);
+  useEffect(() => () => { generation.current += 1; }, []);
 
   async function onSignOut() {
     if (busy.current) {
@@ -59,22 +60,15 @@ export function useSignOut() {
     busy.current = true;
     setSigningOut(true);
     setSignOutError("");
-    const result = await postSignOut();
-    if (result === "error") {
-      busy.current = false;
-      setSigningOut(false);
-      setSignOutError("Sign-out did not finish. Try again.");
-      return;
+    const current = generation.current;
+    try {
+      await authPost("/api/sign-out", {});
+      if (current === generation.current) window.location.replace("/login");
+    } catch {
+      if (current === generation.current) setSignOutError("Sign-out did not finish. Try again.");
+    } finally {
+      if (current === generation.current) { busy.current = false; setSigningOut(false); }
     }
-    const supabase = browserSupabase();
-    if (supabase) {
-      try {
-        await supabase.auth.signOut({ scope: "local" });
-      } catch {
-        // The server already cleared the session cookies.
-      }
-    }
-    window.location.replace("/");
   }
 
   return { signOutError, signingOut, onSignOut };

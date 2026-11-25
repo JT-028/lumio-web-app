@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { sessionCookieOptions } from "@/lib/supabase/cookie-options";
 import { readPublicSupabase } from "@/lib/supabase/public-config";
 import { AppError } from "@/services/errors";
+import { authFetch } from "@/lib/auth-security";
 
 type CookieClientOptions = {
   secure: boolean;
@@ -15,9 +16,10 @@ export function createSupabaseCookieClient(
 ): SupabaseClient {
   const config = readPublicSupabase();
   if (!config) {
-    throw new AppError("INTERNAL", 500, "The server is not configured.", null);
+    throw new AppError("AUTH_UNAVAILABLE", 503, "Sign in is temporarily unavailable.", null);
   }
   return createServerClient(config.url, config.key, {
+    global: { fetch: authFetch },
     cookieOptions: sessionCookieOptions(options.secure),
     cookies: {
       getAll: options.getAll,

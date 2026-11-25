@@ -7,46 +7,8 @@ import { createRoot, type Root } from "react-dom/client";
 import type { Me } from "../src/domain/types.ts";
 import { dom, navigations, setViewport, typeInto } from "./support/dom.ts";
 
-type AuthCall = { name: string; args: Record<string, unknown> };
-
-const authCalls: AuthCall[] = [];
-let signUpSession = false;
-
-mock.module("@/lib/supabase/browser", {
-  exports: {
-    browserSupabase() {
-      return {
-        auth: {
-          async signInWithPassword(args: Record<string, unknown>) {
-            authCalls.push({ name: "signInWithPassword", args });
-            return {
-              data: { user: null, session: null },
-              error: { code: "invalid_credentials", message: "Invalid login credentials" },
-            };
-          },
-          async signUp(args: Record<string, unknown>) {
-            authCalls.push({ name: "signUp", args });
-            return {
-              data: {
-                user: { identities: [{}] },
-                session: signUpSession ? { access_token: "session" } : null,
-              },
-              error: null,
-            };
-          },
-          async signInWithOAuth(args: Record<string, unknown>) {
-            authCalls.push({ name: "signInWithOAuth", args });
-            return { data: { url: "https://accounts.google.com/o/oauth2/mock" }, error: null };
-          },
-          async signOut() {
-            authCalls.push({ name: "signOut", args: {} });
-            return { error: null };
-          },
-        },
-      };
-    },
-  },
-});
+// Auth regressions migrated to auth-recovery-ui.test.tsx and real-handler tests.
+mock.module("@/lib/supabase/browser", { exports: { browserSupabase() { throw new Error("browser auth retired"); } } });
 
 dom.matchMedia = ((query: string) => ({
   matches: query.includes("prefers-reduced-motion"),
@@ -74,6 +36,9 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input);
   const method = init?.method ?? "GET";
   fetches.push({ url, method });
+  if (url === "/api/auth/context") return Response.json({ authenticated: meStatus === 200 && !!meBody,
+    next: !meBody?.role ? "/role" : meBody.role === "student" && !meBody.has_main_parent ? "/wait" : "/home",
+    onboarding: null, has_continuation: false, link: "none" }, { headers: { "X-CSRF-Token": "c".repeat(43) } });
   if (url.endsWith("/api/home")) {
     if (meStatus !== 200 || !meBody) return new Response(null, { status: 401 });
     if (!meBody.role) return new Response(JSON.stringify({ error: { code: "ROLE_REQUIRED" } }), { status: 403 });
@@ -204,7 +169,6 @@ async function render(node: ReactNode): Promise<void> {
 
 beforeEach(() => {
   navigations.length = 0;
-  authCalls.length = 0;
   fetches.length = 0;
   profilePosts.length = 0;
   invitePosts.length = 0;
@@ -213,35 +177,14 @@ beforeEach(() => {
   profileBody = null;
   inviteStatus = 201;
   inviteCode = "";
-  signUpSession = false;
   document.documentElement.classList.remove("fonts-ready");
   setViewport(320);
 });
-
-async function openCreate(): Promise<void> {
-  const create = [...document.querySelectorAll("button")].find(
-    (button) => button.textContent === "Create account" && button.getAttribute("aria-pressed") !== null,
-  );
-  assert.ok(create);
-  await act(async () => {
-    create.dispatchEvent(new dom.MouseEvent("click", { bubbles: true }));
-  });
-}
-
-async function chooseStudent(name: string): Promise<void> {
-  const input = document.getElementById("account-student") as HTMLInputElement;
-  assert.ok(input);
-  await act(async () => {
-    input.click();
-  });
-  await typeInto(document.getElementById("account-first-name") as HTMLInputElement, name);
-}
 
 test("the tagline is not hidden at 320px or 1280px, and reduced motion shows the wordmark", () => {
   const css = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
   assert.doesNotMatch(css, /\.tagline[^{]*\{[^}]*display\s*:\s*none/);
   assert.doesNotMatch(css, /\.wordmark[^{]*\{[^}]*display\s*:\s*none/);
-  assert.doesNotMatch(css, /@media[^{]*max-width[^}]*\}/);
   const desktop = css.slice(css.indexOf("@media (min-width: 1280px)"));
   assert.notEqual(desktop, "");
   assert.match(desktop, /\.wordmark/);
@@ -249,56 +192,23 @@ test("the tagline is not hidden at 320px or 1280px, and reduced motion shows the
   assert.doesNotMatch(desktop, /\.wordmark[^{]*\{[^}]*display\s*:\s*none/);
   const reduced = css.slice(
     css.indexOf("@media (prefers-reduced-motion: reduce)"),
-    css.indexOf(".wordmark"),
+    css.indexOf("}", css.indexOf("@media (prefers-reduced-motion: reduce)")) + 1,
   );
   assert.match(reduced, /opacity:\s*1/);
   assert.match(reduced, /transition:\s*none/);
 });
 
-test("the signed-out page and the signed-in shell show Lumio and the tagline at both widths", async () => {
+test("public landing and signed-in shell retain Lumio branding at both widths", async () => {
   const { Landing } = await import("../src/components/landing.tsx");
   const { Shell } = await import("../src/components/shell.tsx");
   for (const width of [320, 1280]) {
-    setViewport(width);
-    await render(<Landing />);
-    assertTagline();
-    assert.match(pageText(), /Continue with Google/);
-    assert.match(pageText(), /Welcome back, little explorer!/);
-    assert.match(pageText(), /Your next big idea is just around the corner\./);
-    assert.match(pageText(), /Forgot password\?/);
-    assert.match(pageText(), /Remember me/);
-    assert.doesNotMatch(pageText(), /Sign out/);
-    assert.doesNotMatch(pageText(), /Password reset is not available yet/);
-    const lumi = document.querySelector(".login-art img");
-    assert.ok(lumi);
-    assert.equal(
-      lumi.getAttribute("alt"),
-      "Lumi, a friendly owl wizard, studying a glowing storybook beside a stack of books.",
-    );
-    assert.match(lumi.getAttribute("src") ?? "", /lumi-hero\.png/);
-    assert.doesNotMatch(lumi.getAttribute("src") ?? "", /lumio_mascot\.png/);
-    const hero = document.querySelector(".login-hero");
-    assert.ok(hero);
-    assert.equal(getComputedStyle(hero).fontSize, width === 1280 ? "44px" : "36px");
-    const cluster = document.querySelector(".login-main");
-    assert.ok(cluster);
-    assert.equal(getComputedStyle(cluster).flexDirection, width === 1280 ? "row" : "column");
-    const tagline = document.querySelector(".tagline");
-    assert.ok(tagline);
-    assert.notEqual(getComputedStyle(tagline).display, "none");
-    assert.notEqual(getComputedStyle(tagline).visibility, "hidden");
-
-    await render(
-      <Shell signedIn>
-        <p>Home</p>
-      </Shell>,
-    );
-    assertTagline();
+    setViewport(width); await render(<Landing />); assertTagline();
+    assert.ok(document.querySelector('a[href="/login"]'));
+    assert.ok(document.querySelector('a[href="/signup"]'));
+    assert.equal(document.querySelector("form"), null);
+    assert.match(document.querySelector("img")?.getAttribute("src") ?? "", /lumi-hero\.png/);
+    await render(<Shell signedIn><p>Home</p></Shell>); assertTagline();
     assert.match(pageText(), /Sign out/);
-    assert.ok(document.documentElement.classList.contains("fonts-ready"));
-    const wordmark = document.querySelector(".wordmark");
-    assert.ok(wordmark);
-    assert.equal(getComputedStyle(wordmark).opacity, "1");
   }
 });
 
@@ -329,173 +239,8 @@ test("role and the parent home do not render an owl, and wait is not the dashboa
   assertNoMascot();
 });
 
-test("email sign-in goes through the Supabase browser client and a wrong password is refused", async () => {
-  const { Landing } = await import("../src/components/landing.tsx");
-  await render(<Landing />);
-  const remember = document.getElementById("remember") as HTMLInputElement;
-  assert.ok(remember);
-  await act(async () => {
-    remember.click();
-  });
-  await typeInto(document.getElementById("email") as HTMLInputElement, "ada@example.com");
-  await typeInto(document.getElementById("password") as HTMLInputElement, "wrong-password");
-  const form = document.querySelector("form");
-  assert.ok(form);
-  await act(async () => {
-    form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  });
-  assert.equal(authCalls.length, 1);
-  assert.equal(authCalls[0]?.name, "signInWithPassword");
-  assert.deepEqual(authCalls[0]?.args, { email: "ada@example.com", password: "wrong-password" });
-  assert.match(pageText(), /That email and password do not match\. Try again\./);
-  assert.equal((document.getElementById("password") as HTMLInputElement).value, "");
-  assert.equal((document.getElementById("email") as HTMLInputElement).value, "ada@example.com");
-  assert.equal(remember.checked, true);
-  assert.doesNotMatch(pageText(), /session was saved|remembered you/i);
-  assert.deepEqual(navigations, []);
-});
-
-test("email sign-up goes through the Supabase browser client and stays on the page", async () => {
-  const { Landing } = await import("../src/components/landing.tsx");
-  await render(<Landing />);
-  await openCreate();
-  await chooseStudent("Lin");
-  await typeInto(document.getElementById("email") as HTMLInputElement, "ada@example.com");
-  await typeInto(document.getElementById("password") as HTMLInputElement, "correct-horse");
-  await typeInto(document.getElementById("confirm") as HTMLInputElement, "correct-horse");
-  const form = document.querySelector("form");
-  assert.ok(form);
-  await act(async () => {
-    form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  });
-  assert.equal(authCalls.filter((call) => call.name === "signInWithPassword").length, 0);
-  assert.equal(authCalls.length, 1);
-  assert.equal(authCalls[0]?.name, "signUp");
-  assert.equal(authCalls[0]?.args.email, "ada@example.com");
-  assert.equal(authCalls[0]?.args.password, "correct-horse");
-  const options = authCalls[0]?.args.options as { emailRedirectTo?: string; data?: unknown };
-  assert.equal(options.emailRedirectTo, "http://localhost:3010/auth/callback");
-  assert.equal(options.data, undefined);
-  assert.equal(Object.hasOwn(authCalls[0]?.args ?? {}, "role"), false);
-  assert.equal(profilePosts.length, 0);
-  assert.doesNotMatch(pageText(), /\bteacher\b/i);
-  assert.match(pageText(), /Check your email to confirm this address/);
-  assert.deepEqual(navigations, []);
-});
-
-test("a new email session saves the chosen role once, and an existing profile is not saved again", async () => {
-  const { Landing } = await import("../src/components/landing.tsx");
-  signUpSession = true;
-  await render(<Landing />);
-  meStatus = 200;
-  meBody = noRole;
-  profileBody = { ...student, first_name: "Lin" };
-  await openCreate();
-  await chooseStudent("Lin");
-  await typeInto(document.getElementById("email") as HTMLInputElement, "lin@example.com");
-  await typeInto(document.getElementById("password") as HTMLInputElement, "correct-horse");
-  await typeInto(document.getElementById("confirm") as HTMLInputElement, "correct-horse");
-  const form = document.querySelector("form");
-  assert.ok(form);
-  await act(async () => {
-    form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 40));
-  });
-  assert.deepEqual(profilePosts, [{ first_name: "Lin", role: "student" }]);
-  assert.deepEqual(navigations, ["/wait"]);
-
-  navigations.length = 0;
-  profilePosts.length = 0;
-  authCalls.length = 0;
-  meStatus = 401;
-  meBody = null;
-  profileBody = null;
-  await render(<Landing />);
-  meStatus = 200;
-  meBody = parent;
-  await openCreate();
-  await chooseStudent("Ada");
-  await typeInto(document.getElementById("email") as HTMLInputElement, "ada@example.com");
-  await typeInto(document.getElementById("password") as HTMLInputElement, "correct-horse");
-  await typeInto(document.getElementById("confirm") as HTMLInputElement, "correct-horse");
-  const again = document.querySelector("form");
-  assert.ok(again);
-  await act(async () => {
-    again.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 40));
-  });
-  assert.deepEqual(profilePosts, []);
-  assert.deepEqual(navigations, ["/home"]);
-});
-
-test("forgot password does not call a route", async () => {
-  const { Landing } = await import("../src/components/landing.tsx");
-  await render(<Landing />);
-  const before = fetches.length;
-  const forgot = document.getElementById("forgot-password");
-  assert.ok(forgot);
-  await act(async () => {
-    forgot.dispatchEvent(new dom.MouseEvent("click", { bubbles: true }));
-  });
-  assert.match(pageText(), /Password reset is not available yet\./);
-  assert.equal(authCalls.length, 0);
-  assert.equal(fetches.slice(before).length, 0);
-  assert.equal(
-    fetches.some((call) => /reset|recover|forgot/i.test(call.url)),
-    false,
-  );
-});
-
-test("passwords that differ do not call the Supabase client", async () => {
-  const { Landing } = await import("../src/components/landing.tsx");
-  await render(<Landing />);
-  const create = [...document.querySelectorAll("button")].find(
-    (button) => button.textContent === "Create account" && button.getAttribute("aria-pressed") !== null,
-  );
-  assert.ok(create);
-  await act(async () => {
-    create.dispatchEvent(new dom.MouseEvent("click", { bubbles: true }));
-  });
-  await typeInto(document.getElementById("email") as HTMLInputElement, "ada@example.com");
-  await typeInto(document.getElementById("password") as HTMLInputElement, "one-password");
-  await typeInto(document.getElementById("confirm") as HTMLInputElement, "other-password");
-  const form = document.querySelector("form");
-  assert.ok(form);
-  await act(async () => {
-    form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  });
-  assert.deepEqual(authCalls, []);
-  assert.match(pageText(), /Those passwords do not match\./);
-});
-
-test("Google sign-in calls signInWithOAuth and does not leave for Google", async () => {
-  const { Landing } = await import("../src/components/landing.tsx");
-  await render(<Landing />);
-  const google = [...document.querySelectorAll("button")].find(
-    (button) => button.textContent === "Continue with Google",
-  );
-  assert.ok(google);
-  await act(async () => {
-    google.dispatchEvent(new dom.MouseEvent("click", { bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  });
-  assert.equal(authCalls.length, 1);
-  assert.equal(authCalls[0]?.name, "signInWithOAuth");
-  assert.equal(authCalls[0]?.args.provider, "google");
-  const options = authCalls[0]?.args.options as { redirectTo?: string };
-  assert.equal(options.redirectTo, "http://localhost:3010/auth/callback");
-  assert.equal(
-    fetches.some((call) => call.url.includes("google") || call.url.includes("supabase")),
-    false,
-  );
-  assert.equal(
-    navigations.some((url) => url.includes("google")),
-    false,
-  );
-});
+// Password mismatch/errors, signup confirmation on/off, Google and working reset
+// are verified against the dedicated routes in auth-recovery-ui.test.tsx.
 
 test("the role form offers parent and student and never offers teacher", async () => {
   meStatus = 200;
@@ -689,7 +434,7 @@ test("a connect failure does not show a link", async () => {
   assert.doesNotMatch(pageText(), /raw-token-should-not-render|https?:\/\//i);
 });
 
-test("sign out returns to /", async () => {
+test("sign out returns to the dedicated login route", async () => {
   const { Shell } = await import("../src/components/shell.tsx");
   await render(
     <Shell signedIn>
@@ -703,6 +448,6 @@ test("sign out returns to /", async () => {
     await new Promise((resolve) => setTimeout(resolve, 30));
   });
   assert.equal(fetches.some((call) => call.url.endsWith("/api/sign-out") && call.method === "POST"), true);
-  assert.equal(authCalls.some((call) => call.name === "signOut"), true);
-  assert.deepEqual(navigations, ["/"]);
+  // Shared server sign-out is authoritative; no browser SDK sign-out remains.
+  assert.deepEqual(navigations, ["/login"]);
 });

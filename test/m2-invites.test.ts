@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { beforeEach, mock, test } from "node:test";
+import { mutationHeaders } from "./support/cookies.ts";
 
 type Row = Record<string, unknown>;
 const parentId = "00000000-0000-4000-8000-000000000001";
@@ -14,8 +15,9 @@ const mailCalls: { url: string; body: Record<string, unknown> }[] = [];
 
 mock.module("server-only", { exports: {} });
 mock.module("@/lib/supabase/server", { exports: {
+  clearServerAuthCookies: async () => {},
   createSupabaseServerClient: async () => ({ auth: { getUser: async () => ({
-    data: { user: signedIn ? { id: parentId, email: "parent@example.test" } : null }, error: null,
+    data: { user: signedIn ? { id: parentId, email: "parent@example.test", email_confirmed_at: "2026-10-01T00:00:00Z" } : null }, error: null,
   }) } }),
 } });
 mock.module("@/data/db", { exports: { getDb: () => ({ from(table: string) {
@@ -58,7 +60,7 @@ beforeEach(() => {
   rows.length = 0; mailCalls.length = 0;
   signedIn = true; mailStatus = 200; mailThrows = false; deleteFails = false;
   profile = { id: parentId, role: "parent", first_name: "Ada", email: "parent@example.test" };
-  process.env.NEXT_PUBLIC_APP_URL = "https://lumio.example.test/ignored-path";
+  process.env.NEXT_PUBLIC_APP_URL = "https://lumio.example.test";
   process.env.RESEND_API_KEY = "synthetic-not-a-real-key";
   process.env.RESEND_FROM_EMAIL = "Lumio <sender@example.test>";
 });
@@ -66,7 +68,7 @@ beforeEach(() => {
 async function send(body: unknown = { invited_email: "child@gmail.com" }, raw = false) {
   const { POST } = await import("../src/app/api/invites/route.ts");
   return POST(new Request("http://localhost:3010/api/invites", {
-    method: "POST", headers: { "content-type": "application/json" },
+    method: "POST", headers: mutationHeaders("https://lumio.example.test"),
     body: raw ? String(body) : JSON.stringify(body),
   }));
 }

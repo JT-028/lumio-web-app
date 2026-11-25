@@ -1,3 +1,5 @@
+import { AppError } from "@/services/errors";
+
 export type PublicSupabaseConfig = {
   url: string;
   key: string;
@@ -15,17 +17,19 @@ export function readPublicSupabase(): PublicSupabaseConfig | null {
   return { url, key };
 }
 
-export function resolveAppOrigin(requestUrl: string): string {
+export function resolveAppOrigin(_requestUrl?: string): string {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim() ?? "";
   if (configured) {
     try {
       const parsed = new URL(configured);
-      if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+      const local = ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname);
+      if (!parsed.username && !parsed.password && parsed.pathname === "/" && !parsed.search && !parsed.hash &&
+          (parsed.protocol === "https:" || (parsed.protocol === "http:" && local && process.env.NODE_ENV !== "production"))) {
         return parsed.origin;
       }
     } catch {
-      return new URL(requestUrl).origin;
+      // Fail closed; caller-supplied Host is never a configuration source.
     }
   }
-  return new URL(requestUrl).origin;
+  throw new AppError("AUTH_UNAVAILABLE", 503, "Sign in is temporarily unavailable.");
 }

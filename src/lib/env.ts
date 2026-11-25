@@ -7,7 +7,7 @@ import {
 export function requirePublicSupabase(): PublicSupabaseConfig {
   const config = readPublicSupabase();
   if (!config) {
-    throw new AppError("INTERNAL", 500, "The server is not configured.", null);
+    throw new AppError("AUTH_UNAVAILABLE", 503, "Sign in is temporarily unavailable.", null);
   }
   return config;
 }
@@ -18,7 +18,7 @@ export function requireSecretKey(): string {
     process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
     "";
   if (!key) {
-    throw new AppError("INTERNAL", 500, "The server is not configured.", null);
+    throw new AppError("AUTH_UNAVAILABLE", 503, "Sign in is temporarily unavailable.", null);
   }
   return key;
 }

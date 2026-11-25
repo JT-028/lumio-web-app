@@ -1,7 +1,7 @@
 export type ProfileRow = {
   id: string;
-  role: "parent" | "student";
-  first_name: string;
+  role: "parent" | "student" | null;
+  first_name: string | null;
   email: string;
   email_key: string;
 };
@@ -17,7 +17,7 @@ export function resetProfiles(): void {
 type View = {
   id: string;
   role: ProfileRow["role"];
-  first_name: string;
+  first_name: string | null;
   email: string;
 };
 

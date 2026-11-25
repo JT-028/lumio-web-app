@@ -53,12 +53,12 @@ async function errorBody(response: Response): Promise<{
   };
 }
 
-test("GET /api/me returns 500 INTERNAL when the server is not configured", async () => {
+test("GET /api/me returns 503 AUTH_UNAVAILABLE when the server is not configured", async () => {
   const response = await getMe();
   const error = await errorBody(response);
-  assert.equal(response.status, 500);
-  assert.equal(error.code, "INTERNAL");
-  assert.equal(error.message, "The server is not configured.");
+  assert.equal(response.status, 503);
+  assert.equal(error.code, "AUTH_UNAVAILABLE");
+  assert.equal(error.message, "Sign in is temporarily unavailable.");
   assert.equal(error.details, null);
   assert.match(response.headers.get("cache-control") ?? "", /private/);
   assert.match(response.headers.get("cache-control") ?? "", /no-store/);
@@ -66,6 +66,7 @@ test("GET /api/me returns 500 INTERNAL when the server is not configured", async
 });
 
 test("GET /api/me without a session is 401 UNAUTHENTICATED when the server is configured", async () => {
+  process.env.NEXT_PUBLIC_APP_URL = "http://127.0.0.1:3010";
   process.env.NEXT_PUBLIC_SUPABASE_URL = "http://127.0.0.1:9";
   process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = "test-publishable-key";
   const response = await getMe();

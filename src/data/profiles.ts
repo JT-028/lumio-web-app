@@ -2,8 +2,16 @@ import "server-only";
 import type { ProfileRecord, Role } from "@/domain/types";
 import { getDb } from "@/data/db";
 import { AppError } from "@/services/errors";
+import { parseFirstName } from "@/domain/name";
 
 const PROFILE_COLUMNS = "id, role, first_name, email";
+
+export class InvalidProfileError extends AppError {
+  constructor() {
+    super("INTERNAL", 500, "The saved account profile could not be verified.");
+    this.name = "InvalidProfileError";
+  }
+}
 
 export class ProfileUniqueConflict extends Error {
   constructor() {
@@ -94,6 +102,11 @@ function parseProfile(data: unknown): ProfileRecord {
   }
   if (firstName !== null && typeof firstName !== "string") {
     throw new AppError("INTERNAL", 500, "Something went wrong.", null);
+  }
+  // Chosen roles require names in SQL. Nullable placeholder rows are SQL-valid,
+  // but cannot be completed through the insert-only, immutable-role contract.
+  if (role === null || !parseFirstName(firstName).ok) {
+    throw new InvalidProfileError();
   }
   return {
     id,
