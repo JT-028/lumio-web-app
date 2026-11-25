@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import type { Me } from "@/domain/types";
 import { getMe } from "@/lib/lumio-client";
 import { readAuthContext } from "@/lib/auth-client";
-import { Lines, Shell } from "@/components/shell";
+import { AppShell, HomeSkeleton } from "@/components/app-shell";
+import { Shell } from "@/components/shell";
+import { Loading, Skeleton, StatusLine } from "@/components/ui";
 
 type GateState =
   | { kind: "loading" }
@@ -12,23 +14,18 @@ type GateState =
   | { kind: "error" }
   | { kind: "ready"; me: Me };
 
-const skeletonCount = {
-  role: 3,
-  wait: 2,
-  home: 4,
-} as const;
-
 export function AccountGate({
   page,
   children,
 }: {
   page: "role" | "wait" | "home";
-  children: (me: Me) => React.ReactNode;
+  children: (me: Me, retry: () => void) => React.ReactNode;
 }) {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<GateState>({ kind: "loading" });
 
   const here = page === "role" ? "/role" : page === "wait" ? "/wait" : "/home";
+  const retry = () => setAttempt((current) => current + 1);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,33 +60,35 @@ export function AccountGate({
   }, [attempt, here]);
 
   if (state.kind === "loading" || state.kind === "redirecting") {
+    if (page === "home") return <HomeSkeleton />;
     return (
       <Shell signedIn busy>
-        <p className="visually-hidden">Loading</p>
-        <Lines count={skeletonCount[page]} />
+        <Loading />
+        {page === "role" ? <Skeleton lines={1} blocks={3} /> : <Skeleton circle lines={2} />}
       </Shell>
     );
   }
 
   if (state.kind === "error") {
-    return (
+    const button = (
+      <button type="button" className="button-primary" autoFocus onClick={retry}>
+        {page === "home" ? "Try again" : "Check again"}
+      </button>
+    );
+    return page === "home" ? (
+      <AppShell>
+        <section className="card stack">
+          <StatusLine tone="error">We could not open your home. Try again.</StatusLine>
+          {button}
+        </section>
+      </AppShell>
+    ) : (
       <Shell signedIn>
-        <div className="stack">
-          <p className="status is-error" aria-live="polite">
-            {page === "home" ? "We could not open your home. Try again." : "We could not check your account. Check again."}
-          </p>
-          <button
-            type="button"
-            className="button-primary"
-            autoFocus
-            onClick={() => setAttempt((current) => current + 1)}
-          >
-            {page === "home" ? "Try again" : "Check again"}
-          </button>
-        </div>
+        <StatusLine tone="error">We could not check your account. Check again.</StatusLine>
+        {button}
       </Shell>
     );
   }
 
-  return <>{children(state.me)}</>;
+  return <>{children(state.me, retry)}</>;
 }

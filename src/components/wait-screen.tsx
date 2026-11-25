@@ -2,15 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import { getHome, homeRedirect } from "@/lib/m2-client";
-import { Lines, Shell } from "@/components/shell";
-
-const heroSrc = new URL("../assets/lumi-hero.png", import.meta.url).href;
-const HERO_ALT =
-  "Lumi, a friendly owl wizard, studying a glowing storybook beside a stack of books.";
+import { InfoIcon } from "@/components/icons";
+import { LUMI_ALT, LumiImage } from "@/components/lumi-image";
+import { Shell } from "@/components/shell";
+import { Loading, Skeleton, StatusLine } from "@/components/ui";
 
 export function WaitScreen() {
   const [status, setStatus] = useState("");
-  const [tone, setTone] = useState<"error" | "success" | "neutral">("neutral");
+  const [tone, setTone] = useState<"error" | "info">("info");
   const [busy, setBusy] = useState(false);
   const [phase, setPhase] = useState<"loading" | "ready" | "redirecting">("loading");
   const lock = useRef(false);
@@ -46,18 +45,15 @@ export function WaitScreen() {
     }
     setBusy(false);
     setPhase("ready");
-    setTone("success");
+    setTone("info");
     setStatus(initial ? "" : "Still waiting for a parent.");
   }
 
-  const statusClass =
-    tone === "success" ? "status is-success" : tone === "error" ? "status is-error" : "status";
-
-  if (phase !== "ready") return <Shell signedIn busy><p className="visually-hidden">Loading</p><Lines count={2} /></Shell>;
+  if (phase !== "ready") return <Shell signedIn busy center><Loading /><Skeleton circle lines={2} /></Shell>;
   return (
-    <Shell signedIn busy={busy}>
+    <Shell signedIn busy={busy} center>
       <form
-        className="stack"
+        className="stack is-centered"
         method="post"
         aria-busy={busy}
         onSubmit={(event) => {
@@ -65,20 +61,27 @@ export function WaitScreen() {
           void checkAgain();
         }}
       >
-        <figure className="wait-lumi">
-          <img src={heroSrc} alt={HERO_ALT} />
-        </figure>
-        <h1 className="page-title display-text">Waiting for a parent</h1>
-        <p className="body-copy">
+        <LumiImage pose="lumi-think" alt={LUMI_ALT["lumi-think"]} size="md" />
+        <h1 className="page-title">Waiting for a parent</h1>
+        <p>
           You can use Lumio after a parent connects you. Until then, this is the only page you can
           open.
         </p>
+        <section className="info-panel" aria-labelledby="next-title">
+          <InfoIcon className="info-panel-icon" />
+          <div>
+            <h2 id="next-title" className="panel-title">What happens next</h2>
+            <ol className="next-steps">
+              <li>Ask your parent to send a connect email to your Gmail.</li>
+              <li>Open that email and press Accept this link.</li>
+              <li>Come back here and press Check again.</li>
+            </ol>
+          </div>
+        </section>
         <button type="submit" className="button-primary" disabled={busy}>
           Check again
         </button>
-        <p className={statusClass} aria-live="polite">
-          {status}
-        </p>
+        <StatusLine tone={tone}>{status}</StatusLine>
       </form>
     </Shell>
   );

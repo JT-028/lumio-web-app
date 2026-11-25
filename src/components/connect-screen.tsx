@@ -6,8 +6,11 @@ import type { ConnectPreview, Me } from "@/domain/types";
 import { getMe } from "@/lib/lumio-client";
 import { connectExpiry, getConnectPreview } from "@/lib/m2-client";
 import { AuthFailure, authPost, readAuthContext } from "@/lib/auth-client";
-import { Lines, Shell } from "@/components/shell";
+import { Shell } from "@/components/shell";
 import { ConnectAuth } from "@/components/connect-auth";
+import { CheckIcon, MailIcon } from "@/components/icons";
+import { LUMI_ALT, LumiImage, type MeaningfulPose } from "@/components/lumi-image";
+import { Loading, Skeleton, StatusLine } from "@/components/ui";
 
 type Screen = { kind: "loading" | "redirecting" | "error" | "notfound" | "expired" }
   | { kind: "ready"; preview: ConnectPreview; me: Me | null };
@@ -117,34 +120,54 @@ export function ConnectScreen({ token }: { token: string }) {
 
   const ready = screen.kind === "ready" ? screen : null;
   const loading = screen.kind === "loading" || screen.kind === "redirecting";
+  const pose = posture(screen.kind, ready?.me ?? null, outcome, status);
   return (
-    <Shell signedIn={!!ready?.me} busy={loading || busy}>
-      {loading ? <><p className="visually-hidden">Loading</p><Lines count={3} /></> :
-        <div className="stack connect-screen">
-          <h1 className="page-title display-text">Connect to a parent</h1>
-          {screen.kind === "notfound" ? <p className="body-copy">This connect link could not be found.</p> : null}
-          {screen.kind === "expired" ? <p className="body-copy">{EXPIRED}</p> : null}
+    <Shell signedIn={!!ready?.me} busy={loading || busy} center>
+      {loading || !pose ? <><Loading /><Skeleton circle lines={3} /></> :
+        <div className="stack is-centered connect-screen">
+          <LumiImage pose={pose} alt={LUMI_ALT[pose]} size="md" />
+          <h1 className="page-title">Connect to a parent</h1>
+          {screen.kind === "notfound" ? <p>This connect link could not be found. Ask your parent to send a new one.</p> : null}
+          {screen.kind === "expired" ? <p>{EXPIRED}</p> : null}
           {screen.kind === "error" ? <>
-            <p className="status is-error" aria-live="polite">This page could not be loaded. Try again.</p>
+            <StatusLine tone="error">This page could not be loaded. Try again.</StatusLine>
             <button ref={retry} className="button-primary" type="button" onClick={() => setAttempt((v) => v + 1)}>Try again</button>
           </> : null}
           {ready ? <>
-            <p className="body-copy">{ready.preview.parent_first_name} sent this link to {ready.preview.invited_email}.</p>
-            <p className="body-copy">{connectExpiry(ready.preview.expires_at)}</p>
+            <div className="info-panel">
+              <MailIcon className="info-panel-icon" />
+              <div>
+                <p>{ready.preview.parent_first_name} sent this link to {ready.preview.invited_email}.</p>
+                <p>{connectExpiry(ready.preview.expires_at)}</p>
+              </div>
+            </div>
             {!ready.me ? <>
-              {ready.preview.state === "accepted" ? <p className="body-copy">This link was already used. Sign in with that Gmail if it is yours. This page does not connect anyone new.</p> : null}
-              {ready.preview.state === "ignored" ? <p className="body-copy">This link does not connect anyone. The student stays with the first parent.</p> : null}
+              {ready.preview.state === "accepted" ? <p>This link was already used. Sign in with that Gmail if it is yours. This page does not connect anyone new.</p> : null}
+              {ready.preview.state === "ignored" ? <p>This link does not connect anyone. The student stays with the first parent.</p> : null}
               <ConnectAuth token={token} allowCreate={ready.preview.state === "sent"} />
             </> : <>
-              {ready.me.role === "parent" ? <p className="body-copy">{PARENT}</p> : null}
-              {ready.me.role === "parent" || outcome === "mismatch" || outcome === "parent" ? <ConnectAuth token={token} allowCreate={false} switchAccount /> : null}
-              {ready.me.role === "student" && outcome === "ready" ? <button className="button-primary" type="button" disabled={busy} onClick={() => void accept()}>{busy ? "Accepting…" : "Accept this link"}</button> : null}
-              <p ref={statusRef} className="status" aria-live="polite" tabIndex={-1}>{status}</p>
+              {ready.me.role === "parent" ? <p>{PARENT}</p> : null}
+              {ready.me.role === "student" && outcome === "ready" ? <button className="button-primary" type="button" disabled={busy} onClick={() => void accept()}><CheckIcon />{busy ? "Accepting…" : "Accept this link"}</button> : null}
+              <StatusLine ref={statusRef} tone={outcome === "accepted" ? "success" : outcome === "ignored" ? "info" : "error"} focusable>{status}</StatusLine>
               {outcome === "accepted" ? <button className="button-primary" type="button" onClick={openWait}>Try again</button> : null}
-              {ready.me.role === "parent" || outcome === "parent" || outcome === "ignored" ? <button className="button-quiet" type="button" onClick={() => window.location.replace("/home")}>Go to home</button> : null}
+              {ready.me.role === "parent" || outcome === "mismatch" || outcome === "parent" ? <ConnectAuth token={token} allowCreate={false} switchAccount /> : null}
+              {ready.me.role === "parent" || outcome === "parent" || outcome === "ignored" ? <button className="button-secondary" type="button" onClick={() => window.location.replace("/home")}>Go to home</button> : null}
             </>}
           </> : null}
         </div>}
     </Shell>
   );
+}
+
+/** Lumi's pose for each connect state (Iris §6 table). */
+function posture(kind: Screen["kind"], me: Me | null, outcome: Outcome, status: string): MeaningfulPose | null {
+  if (kind === "loading" || kind === "redirecting") return null;
+  if (kind === "notfound") return "lumi-question";
+  if (kind === "expired") return "lumi-calm";
+  if (kind === "error") return "lumi-think";
+  if (!me) return "lumi-hello";
+  if (outcome === "accepted") return "lumi-cheer";
+  if (outcome === "mismatch") return "lumi-question";
+  if (outcome !== "ready" || me.role === "parent") return "lumi-calm";
+  return status ? "lumi-think" : "lumi-hello";
 }

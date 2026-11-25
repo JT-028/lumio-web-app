@@ -6,7 +6,11 @@ import { normalizeFirstName, parseFirstName } from "@/domain/name";
 import { firstNameError } from "@/lib/form-checks";
 import { AuthFailure, authPost, readAuthContext } from "@/lib/auth-client";
 import { AccountGate } from "@/components/account-gate";
+import { ChoiceCard } from "@/components/choice-card";
+import { Field } from "@/components/field";
+import { AlertIcon } from "@/components/icons";
 import { Shell } from "@/components/shell";
+import { StatusLine } from "@/components/ui";
 
 const CHECK_FAILED = "We could not check your account. Check again.";
 const SAVED_STUCK =
@@ -102,16 +106,12 @@ function RoleForm({ me }: { me: Me }) {
   if (locked) {
     return (
       <Shell signedIn busy={submitting}>
-        <div className="stack">
-          <p id="role-status" tabIndex={-1} className="status is-error" aria-live="polite">
-            {status}
-          </p>
-          {status === CHECK_FAILED ? (
-            <button type="button" className="button-primary" disabled={submitting} onClick={() => { void redirectFromMe().catch(() => setStatus(CHECK_FAILED)); }}>
-              Check again
-            </button>
-          ) : null}
-        </div>
+        <StatusLine id="role-status" tone={status === ALREADY ? "info" : "error"} focusable>{status}</StatusLine>
+        {status === CHECK_FAILED ? (
+          <button type="button" className="button-primary" disabled={submitting} onClick={() => { void redirectFromMe().catch(() => setStatus(CHECK_FAILED)); }}>
+            Check again
+          </button>
+        ) : null}
       </Shell>
     );
   }
@@ -125,92 +125,36 @@ function RoleForm({ me }: { me: Me }) {
         aria-busy={submitting}
         onSubmit={(event) => void onSubmit(event)}
       >
-        <h1 className="page-title display-text">Finish setting up your account.</h1>
-        {me.role ? <p>Your saved role: {me.role === "parent" ? "Parent" : "Student"}. Your saved role cannot be changed.</p> : null}
-        <fieldset disabled={Boolean(me.role) || submitting} aria-describedby={roleMessage ? "role-help role-error" : "role-help"}>
-          <legend className="page-title display-text">Who is this account for?</legend>
+        <h1 className="page-title">Finish setting up your account.</h1>
+        {me.role ? <p>Your saved role: {me.role === "parent" ? "Parent" : "Student"}. It can{"\u2019"}t be changed.</p> : null}
+        <fieldset className="choice-group" disabled={Boolean(me.role) || submitting} aria-describedby={roleMessage ? "role-help role-error" : "role-help"}>
+          <legend className="legend-title">Who is this account for?</legend>
           <p id="role-help" className="helper">
-            You choose once. Lumio cannot change this later.
+            You choose once. Lumio can{"\u2019"}t change this later.
           </p>
           <div className="choices">
-            <div className="choice-block">
-              <label className="choice" htmlFor="role-parent">
-                <input
-                  id="role-parent"
-                  type="radio"
-                  name="role"
-                  value="parent"
-                  checked={role === "parent"}
-                  aria-invalid={roleMessage ? true : undefined}
-                  aria-describedby={roleMessage ? "parent-desc role-error" : "parent-desc"}
-                  onChange={() => {
-                    setRole("parent");
-                    setRoleMessage("");
-                  }}
-                />
-                <span className="choice-name">Parent</span>
-              </label>
-              <p id="parent-desc" className="helper">
-                I will connect my child{"\u2019"}s account.
-              </p>
-            </div>
-            <div className="choice-block">
-              <label className="choice" htmlFor="role-student">
-                <input
-                  id="role-student"
-                  type="radio"
-                  name="role"
-                  value="student"
-                  checked={role === "student"}
-                  aria-invalid={roleMessage ? true : undefined}
-                  aria-describedby={roleMessage ? "student-desc role-error" : "student-desc"}
-                  onChange={() => {
-                    setRole("student");
-                    setRoleMessage("");
-                  }}
-                />
-                <span className="choice-name">Student</span>
-              </label>
-              <p id="student-desc" className="helper">
-                I am the Grade 6 student.
-              </p>
-            </div>
+            <ChoiceCard role="parent" title="Parent" description="I'll connect my child's account." checked={role === "parent"} invalid={Boolean(roleMessage)}
+              onPick={() => { setRole("parent"); setRoleMessage(""); }} />
+            <ChoiceCard role="student" title="Student" description="I'm the Grade 6 student." checked={role === "student"} invalid={Boolean(roleMessage)}
+              onPick={() => { setRole("student"); setRoleMessage(""); }} />
           </div>
-          <p id="role-error" className="field-error">
-            {roleMessage}
-          </p>
+          <p id="role-error" className="field-error">{roleMessage ? <><AlertIcon size={16} />{roleMessage}</> : null}</p>
         </fieldset>
-        <div className="field">
-          <label className="label" htmlFor="first-name">
-            First name
-          </label>
-          <input
-            id="first-name"
-            type="text"
-            autoComplete="given-name"
-            value={firstName}
-            aria-invalid={nameMessage ? true : undefined}
-            aria-describedby={nameMessage ? "name-help name-error" : "name-help"}
-            onChange={(event) => {
-              setFirstName(event.target.value);
-              setNameMessage("");
-            }}
-          />
-          <p id="name-help" className="helper">
-            Up to 40 characters. Letters, spaces, hyphens, or apostrophes.
-          </p>
-          <p id="name-error" className="field-error">
-            {nameMessage}
-          </p>
-        </div>
-        <p
-          id="role-status"
-          tabIndex={-1}
-          className={status ? "status is-error" : "status"}
-          aria-live="polite"
-        >
-          {status}
-        </p>
+        <Field
+          id="first-name"
+          label="First name"
+          type="text"
+          autoComplete="given-name"
+          autoCapitalize="words"
+          enterKeyHint="done"
+          value={firstName}
+          onValue={(value) => { setFirstName(value); setNameMessage(""); }}
+          help="Up to 40 characters. Letters, spaces, hyphens, or apostrophes."
+          helpId="name-help"
+          error={nameMessage}
+          errorId="name-error"
+        />
+        <StatusLine id="role-status" tone="error" focusable>{status}</StatusLine>
         <button type="submit" className="button-primary" disabled={submitting}>
           Save and continue
         </button>

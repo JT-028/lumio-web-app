@@ -3,14 +3,34 @@ import React, { act, type ReactNode } from "react";
 import assert from "node:assert/strict";
 import { afterEach, before, beforeEach, mock, test } from "node:test";
 import { createRoot, type Root } from "react-dom/client";
-import type { Me } from "../src/domain/types.ts";
+import type { Me, OfficialCard } from "../src/domain/types.ts";
+import type { HomeCard, HomeChild } from "../src/lib/m2-client.ts";
 import { dom, navigations, setViewport, typeInto } from "./support/dom.ts";
+import { courseRuns, guideText, officialCards, runCourses } from "./support/cards.ts";
+import { assertArt, assertCalm, assertNoFocusStops, assertPage, guideTexts, normalize } from "./support/ui.ts";
 
 const fixture = "synthetic-connect-fixture";
 const privateValue = "private-response-fixture";
 const student: Me = { id: "student-fixture", role: "student", first_name: "Lin", email: "lin@gmail.com", has_main_parent: false };
+const linkedStudent: Me = { ...student, has_main_parent: true };
 const parent: Me = { ...student, id: "parent-fixture", role: "parent", first_name: "Ada" };
 const preview = { parent_first_name: "Ada", invited_email: "lin@gmail.com", expires_at: "2026-11-01T09:00:00.000Z", state: "sent" };
+// A child exactly as GET /api/home sends it (src/services/home.ts). email and
+// study_sets are private to the client (Aria amendment) and must never render.
+const child = (key: string, first_name: string, official_cards: OfficialCard[] = officialCards(`${privateValue}-${key}`)) =>
+  ({ id: `${privateValue}-${key}`, first_name, email: `${privateValue}@gmail.com`, official_cards, study_sets: [privateValue] });
+const linkedHome = (cards?: OfficialCard[]): Reply => ({ status: 200, body: {
+  role: "student", first_name: "Lin", needs_parent: false, children: [child("lin", "Lin", cards)], study_sets_next_cursor: privateValue,
+} });
+const greeting = (name: string) => new RegExp(`(Hello|Good (morning|afternoon|evening)), ${name}`);
+const ownText = () => normalize(document.body.textContent);
+function noCardInternals(cards: OfficialCard[]) {
+  const html = document.body.innerHTML;
+  for (const card of cards) {
+    assert.ok(!html.includes(card.id) && !html.includes(card.slug) && !html.includes(card.header), `card internals rendered: ${card.slug}`);
+  }
+  assert.doesNotMatch(ownText(), /\bofficial\b|School Year 2026/i);
+}
 let me: Me | null;
 let sessionAfterAuth: Me | null;
 let signUpSession: boolean;
@@ -111,7 +131,10 @@ beforeEach(() => {
   inviteReply = { status: 201, body: { invited_email: "child@gmail.com", token: fixture } };
   document.title = "Connect — Lumio"; setViewport(320);
 });
-afterEach(async () => { noLeaks(); if (root) await act(async () => root?.unmount()); root = null; });
+afterEach(async () => {
+  try { noLeaks(); assertCalm(); assertArt(); }
+  finally { if (root) await act(async () => root?.unmount()); root = null; }
+});
 
 test("preview loading has real chrome, skeleton, no auth or accept", async () => {
   let release!: () => void; holdPreview = new Promise((r) => { release = r; });
@@ -120,9 +143,11 @@ test("preview loading has real chrome, skeleton, no auth or accept", async () =>
   assert.equal(document.querySelector("main")?.getAttribute("aria-busy"), "true");
   assert.match(text(), /Learn\. Grow\. Level Up\./); assert.equal(document.querySelector("form"), null);
   release(); await settle(); assert.ok(document.querySelector('a[href="/login"]'));
+  assert.match(ownText(), /Sign in with the invited email to see this invitation\. Nothing connects until you accept it\./);
+  assert.equal(normalize(document.querySelector("h1")?.textContent), "Connect to a parent"); assertPage();
 });
 
-for (const [status, message] of [[404, "This connect link could not be found."], [410, "This link has expired."]] as const) {
+for (const [status, message] of [[404, "This connect link could not be found. Ask your parent to send a new one."], [410, "This link has expired."]] as const) {
   test(`preview ${status} has generic title and no form or accept`, async () => {
     previewReply = { status }; me = student;
     await render(<ConnectScreen token={fixture} />);
@@ -220,22 +245,38 @@ test("accepted navigation failure offers retry without another accept", async ()
   } finally { dom.location.replace = original; }
   await click("Try again"); assert.deepEqual(navigations, ["/wait"]); assert.equal(accepts().length, 1);
 });
-test("parent home lists returned first names in order, including duplicates, at both widths", async () => {
+test("parent home lists returned first names in order, including duplicates, each with their own guide cards, at both widths", async () => {
   me = parent;
+  const zoe = officialCards(`${privateValue}-zoe`);
+  const firstLin = officialCards(`${privateValue}-lin1`).slice(0, 3);
   homeReply = { status: 200, body: { role: "parent", first_name: "HomeName", needs_parent: false,
-    children: ["Zoe", "Lin", "Lin"].map((first_name) => ({ first_name, id: privateValue, email: privateValue, official_cards: [privateValue], study_sets: [privateValue] })) } };
+    children: [child("zoe", "Zoe", zoe), child("lin1", "Lin", firstLin), child("lin2", "Lin", [])] } };
   for (const width of [320, 1280]) {
     setViewport(width); await render(<HomeScreen />);
-    assert.match(text(), /Hello, HomeName/);
-    assert.deepEqual(Array.from(document.querySelectorAll(".linked-children li")).map((li) => li.textContent), ["Zoe", "Lin", "Lin"]);
-    assert.equal(document.querySelectorAll(".linked-children a").length, 0); button("Send connect email");
+    assert.match(normalize(document.querySelector("h1")?.textContent), /^(Hello|Good (morning|afternoon|evening)), HomeName!$/);
+    assert.match(ownText(), /Here's your family in Lumio\./); assert.match(ownText(), /Your children/);
+    assert.deepEqual(Array.from(document.querySelectorAll(".linked-children .child-name")).map((name) => name.textContent), ["Zoe", "Lin", "Lin"]);
+    const items = Array.from(document.querySelectorAll(".linked-children > li"));
+    assert.equal(items.length, 3);
+    assert.deepEqual(items.map((item) => guideTexts(item)), [zoe.map(guideText), firstLin.map(guideText), []]);
+    assert.deepEqual(items.map((item) => item.querySelectorAll(".course-group").length), [courseRuns(zoe), courseRuns(firstLin), 0]);
+    assert.match(normalize(items[2]?.textContent), /No guides are listed for Lin yet\./);
+    for (const item of items) assert.match(normalize(item.textContent), /Connected/);
+    assertNoFocusStops(".linked-children"); noCardInternals([...zoe, ...firstLin]);
+    assert.doesNotMatch(ownText(), /No child is linked yet/); assertPage();
+    button("Send connect email");
   }
+});
+test("parent home greets without a name when first_name is blank", async () => {
+  me = parent; homeReply = { status: 200, body: { role: "parent", first_name: "  ", needs_parent: false, children: [] } };
+  await render(<HomeScreen />);
+  assert.match(normalize(document.querySelector("h1")?.textContent), /^(Hello|Good (morning|afternoon|evening))!$/);
 });
 test("empty parent list remains empty after invite success", async () => {
   me = parent; homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [] } };
   await render(<HomeScreen />); await input("child-gmail", "child@gmail.com"); await submit();
   assert.match(text(), /No child is linked yet/); assert.match(text(), /Connect email sent to child@gmail.com/);
-  assert.equal(document.querySelectorAll(".linked-children li").length, 0);
+  assert.ok(!document.querySelector(".linked-children"));
   assert.deepEqual(JSON.parse(String(calls.find((c) => c.url === "/api/invites")?.init?.body)), { invited_email: "child@gmail.com" });
 });
 test("parent invite invalid email error is attached to and focuses the field", async () => {
@@ -256,10 +297,12 @@ test("invite validation keeps a typed field independent of provider copy", async
   });
 });
 test("parent invite 401 removes greeting, child list, and form before navigation", async () => {
-  me = parent; homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [{ first_name: "Zoe" }] } };
+  me = parent; homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [child("zoe", "Zoe")] } };
   inviteReply = { status: 401 };
-  await render(<HomeScreen />); await input("child-gmail", "child@gmail.com"); await submit();
-  assert.deepEqual(navigations, ["/login"]); assert.doesNotMatch(text(), /Hello, Ada|Zoe|Connect a child/);
+  await render(<HomeScreen />); assert.match(text(), /Zoe/);
+  await input("child-gmail", "child@gmail.com"); await submit();
+  assert.deepEqual(navigations, ["/login"]); assert.doesNotMatch(text(), /Zoe|Connect a child|Geography 6/);
+  assert.doesNotMatch(text(), greeting("Ada"));
 });
 test("parent household error retries without a false empty list or invite form", async () => {
   me = parent; homeReply = { status: 503 };
@@ -272,14 +315,87 @@ for (const status of [401, 403]) {
   test(`parent home ${status} clears private UI and follows guard`, async () => {
     me = parent; homeReply = { status, body: { error: { code: "ROLE_REQUIRED", message: fixture } } };
     await render(<HomeScreen />); assert.deepEqual(navigations, [status === 401 ? "/" : "/role"]);
-    assert.equal(document.querySelector("form"), null); assert.doesNotMatch(text(), /Hello, Ada/);
+    assert.equal(document.querySelector("form"), null); assert.doesNotMatch(text(), greeting("Ada"));
   });
 }
-test("linked student dashboard still reads only me and study names remain nonfunctional", async () => {
-  me = { ...student, has_main_parent: true }; await render(<HomeScreen />);
-  assert.match(text(), /Your next guide is not on this page yet/); assert.match(text(), /No study time yet/);
-  assert.equal(calls.filter((c) => c.url === "/api/home").length, 0);
-  assert.ok(Array.from(document.querySelectorAll("a")).every((a) => a.getAttribute("href") === "/home"));
+test("linked student home reads me then home and shows children[0]'s 8 guide cards in API order, none a focus stop", async () => {
+  me = linkedStudent; homeReply = linkedHome(); const cards = officialCards(`${privateValue}-lin`);
+  await render(<HomeScreen />);
+  assert.deepEqual(calls.map((c) => c.url).filter((url) => url === "/api/me" || url === "/api/home"), ["/api/me", "/api/home"]);
+  assert.deepEqual(guideTexts(), cards.map(guideText));
+  assert.deepEqual(guideTexts()[0], "Geography 6, Quarter 1");
+  assert.equal(document.querySelectorAll(".course-group").length, 4);
+  assert.deepEqual(Array.from(document.querySelectorAll(".course-group .course-name")).map((name) => name.textContent),
+    ["Geography 6", "History 6", "Language 6", "Mathematics 6"]);
+  assert.deepEqual(Array.from(document.querySelectorAll(".course-group")).map((group) => group.getAttribute("data-course")),
+    ["geography_6", "history_6", "language_6", "mathematics_6"]);
+  assert.equal(normalize(document.getElementById("guides-title")?.textContent), "Your guides");
+  assertNoFocusStops(".course-groups"); noCardInternals(cards);
+  assert.ok(Array.from(document.querySelectorAll("a")).every((a) => ["/home", "#main"].includes(a.getAttribute("href") ?? "")));
+  assert.doesNotMatch(ownText(), /No guides here yet/);
+});
+const unordered = officialCards(`${privateValue}-x`);
+const guideCases: [string, OfficialCard[]][] = [
+  ["three cards out of rank order, regrouped only by consecutive course", [unordered[7]!, unordered[0]!, unordered[6]!]],
+  ["one card whose course and labels the client has never seen",
+    [{ ...officialCards(`${privateValue}-y`)[0]!, course: "science_6", course_label: "Science 6", quarter_label: "Term 1" }]],
+];
+for (const [name, cards] of guideCases) {
+  test(`student guide cards show the API's own labels in the API's order for ${name}`, async () => {
+    me = linkedStudent; homeReply = linkedHome(cards);
+    await render(<HomeScreen />);
+    assert.deepEqual(guideTexts(), cards.map(guideText));
+    assert.equal(document.querySelectorAll(".course-group").length, courseRuns(cards));
+    assert.deepEqual(Array.from(document.querySelectorAll(".course-group")).map((group) => group.getAttribute("data-course")), runCourses(cards));
+    assertNoFocusStops(".course-groups"); noCardInternals(cards);
+  });
+}
+test("a linked student with no guide cards sees a calm empty state, not a padded list", async () => {
+  me = linkedStudent; homeReply = linkedHome([]);
+  await render(<HomeScreen />);
+  assert.equal(document.querySelectorAll(".guide-card").length, 0);
+  assert.match(ownText(), /No guides here yet/); assert.match(ownText(), /Your guides will show up here when they're ready\./);
+  const art = Array.from(document.querySelectorAll("img")).find((image) => /lumi-calm/.test(image.getAttribute("src") ?? ""));
+  assert.equal(art?.getAttribute("alt"), "Lumi the owl standing calmly.");
+});
+for (const [name, body] of [
+  ["needs_parent is true", { role: "student", first_name: "Lin", needs_parent: true, children: [] }],
+  ["no child library is returned", { role: "student", first_name: "Lin", needs_parent: false, children: [] }],
+  ["two child libraries are returned", { role: "student", first_name: "Lin", needs_parent: false, children: [child("a", "Lin"), child("b", "Lin")] }],
+] as const) {
+  test(`a student home read where ${name} keeps the /wait gate and paints no guides`, async () => {
+    me = linkedStudent; homeReply = { status: 200, body };
+    await render(<HomeScreen />);
+    assert.deepEqual(navigations, ["/wait"]);
+    assert.ok(!document.querySelector(".guide-card, .course-groups")); assert.doesNotMatch(ownText(), /Your guides/);
+  });
+}
+for (const [status, code, next] of [[401, "UNAUTHENTICATED", "/"], [403, "ROLE_REQUIRED", "/role"]] as const) {
+  test(`a student home read ${code} follows the existing redirect to ${next}`, async () => {
+    me = linkedStudent; homeReply = { status, body: { error: { code, message: fixture } } };
+    await render(<HomeScreen />);
+    assert.deepEqual(navigations, [next]); assert.ok(!document.querySelector(".guide-card"));
+  });
+}
+test("a failed student home read offers a focused Try again that repeats both reads", async () => {
+  me = linkedStudent; homeReply = { status: 503 };
+  await render(<HomeScreen />);
+  assert.match(text(), /We could not open your home\. Try again\./);
+  assert.ok(document.activeElement === button("Try again"), "Try again has focus"); assert.ok(!document.querySelector(".guide-card"));
+  homeReply = linkedHome(); await click("Try again");
+  assert.equal(calls.filter((c) => c.url === "/api/me").length, 2);
+  assert.equal(calls.filter((c) => c.url === "/api/home").length, 2);
+  assert.equal(document.querySelectorAll(".guide-card").length, 8); assert.deepEqual(navigations, []);
+});
+test("the student home shows the shell skeleton while guides load", async () => {
+  let release!: () => void; holdHome = new Promise((r) => { release = r; });
+  me = linkedStudent; homeReply = linkedHome();
+  await render(<HomeScreen />);
+  assert.ok(document.querySelector(".skeleton")); assert.equal(document.querySelector("main")?.getAttribute("aria-busy"), "true");
+  assert.ok(!document.querySelector(".guide-card")); assert.match(text(), /Learn\. Grow\. Level Up\./);
+  release(); await settle();
+  assert.equal(document.querySelectorAll(".guide-card").length, 8);
+  assert.notEqual(document.querySelector("main")?.getAttribute("aria-busy"), "true");
 });
 test("waiting uses home on mount and Check again, stays waiting, then exits when linked", async () => {
   await render(<WaitScreen />); button("Check again"); await click("Check again");
@@ -304,12 +420,44 @@ test("waiting network failure stays waiting and retry never assumes linked", asy
 test("client adapters discard private fields and reject malformed success", async () => {
   assert.deepEqual(await getConnectPreview(fixture), { ok: true, data: preview });
   assert.deepEqual(await acceptConnect(fixture), { ok: true, data: "accepted" });
-  homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [{ first_name: "Lin", email: privateValue, id: privateValue }] } };
-  assert.deepEqual(await getHome(), { ok: true, data: { role: "parent", first_name: "Ada", needs_parent: false, children: [{ first_name: "Lin" }] } });
+  homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [{ first_name: "Lin", email: privateValue, id: privateValue, official_cards: [] }] } };
+  assert.deepEqual(await getHome(), { ok: true, data: { role: "parent", first_name: "Ada", needs_parent: false, children: [{ id: privateValue, first_name: "Lin", official_cards: [] }] } });
   homeReply = { status: 200, body: { children: [] } }; assert.equal((await getHome()).ok, false);
   previewReply = { status: 200, body: { state: "sent" } }; assert.equal((await getConnectPreview(fixture)).ok, false);
   acceptReply = { status: 200, body: { state: "unknown" } }; assert.equal((await acceptConnect(fixture)).ok, false);
 });
+
+test("getHome keeps each child's id, first_name and official_cards in API order, dropping kind, email and study_sets", async () => {
+  const cards = officialCards("adapter");
+  const sent = [cards[5]!, cards[1]!, cards[3]!].map((card) => ({ ...card, extra: privateValue }));
+  homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, study_sets_next_cursor: privateValue,
+    children: [{ ...child("one", "Zoe", []), official_cards: sent }, child("two", "Lin", [])] } };
+  const keep = ({ id, slug, course, course_label, quarter, quarter_label, header }: OfficialCard): HomeCard =>
+    ({ id, slug, course, course_label, quarter, quarter_label, header });
+  const children: HomeChild[] = [
+    { id: `${privateValue}-one`, first_name: "Zoe", official_cards: [cards[5]!, cards[1]!, cards[3]!].map(keep) },
+    { id: `${privateValue}-two`, first_name: "Lin", official_cards: [] },
+  ];
+  assert.deepEqual(await getHome(), { ok: true, data: { role: "parent", first_name: "Ada", needs_parent: false, children } });
+});
+
+const goodChild = () => ({ id: "child-good", first_name: "Lin", official_cards: officialCards("valid").slice(0, 2) });
+const malformedChildren: [string, (value: ReturnType<typeof goodChild>) => unknown][] = [
+  ["a child without an id", ({ id: _id, ...rest }) => rest],
+  ["a child without first_name", ({ first_name: _name, ...rest }) => rest],
+  ["official_cards that is not an array", (value) => ({ ...value, official_cards: { length: 0 } })],
+  ["a card that is not an object", (value) => ({ ...value, official_cards: [privateValue] })],
+  ["a card with quarter 3", (value) => ({ ...value, official_cards: [{ ...value.official_cards[0]!, quarter: 3 }] })],
+  ["a card with quarter \"1\" as text", (value) => ({ ...value, official_cards: [{ ...value.official_cards[0]!, quarter: "1" }] })],
+  ...(["id", "slug", "course", "course_label", "quarter_label", "header"] as const).map((field): [string, (value: ReturnType<typeof goodChild>) => unknown] =>
+    [`a card whose ${field} is not a string`, (value) => ({ ...value, official_cards: [{ ...value.official_cards[0]!, [field]: 42 }] })]),
+];
+for (const [name, mutate] of malformedChildren) {
+  test(`getHome rejects the whole household read for ${name}`, async () => {
+    homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [goodChild(), mutate(goodChild())] } };
+    assert.equal((await getHome()).ok, false);
+  });
+}
 
 test("a departed waiting screen cannot redirect the new connect screen", async () => {
   let release!: () => void; holdHome = new Promise((r) => { release = r; });
@@ -382,13 +530,13 @@ for (const needs_parent of [true, false]) {
     await render(<HomeScreen />);
     assert.deepEqual(navigations, [needs_parent ? "/wait" : "/home"]);
     assert.equal(document.querySelector("form"), null);
-    assert.doesNotMatch(text(), /Hello, Ada|Connect a child|No child is linked/);
+    assert.doesNotMatch(text(), /Connect a child|No child is linked/); assert.doesNotMatch(text(), greeting("Ada"));
   });
 }
 
 test("malformed child data fails the whole household read, focuses retry, and never paints a partial list", async () => {
   me = parent;
-  homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [{ first_name: "Zoe" }, { email: privateValue }] } };
+  homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [child("zoe", "Zoe"), { email: privateValue }] } };
   await render(<HomeScreen />);
   assert.match(text(), /We could not open your home/);
   assert.equal(document.activeElement, button("Try again"));

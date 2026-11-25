@@ -1,12 +1,18 @@
-import type { ConnectPreview } from "@/domain/types";
+import type { ConnectPreview, OfficialCard } from "@/domain/types";
 
 type Failure = { ok: false; status: number; code: string };
 type Result<T> = { ok: true; data: T } | Failure;
+export type HomeCard = Omit<OfficialCard, "kind">;
+export type HomeChild = {
+  id: string; // React key only; never rendered
+  first_name: string;
+  official_cards: HomeCard[];
+};
 export type HouseholdHome = {
   role: "parent" | "student";
   first_name: string;
   needs_parent: boolean;
-  children: { first_name: string }[];
+  children: HomeChild[];
 };
 
 const codes = new Set([
@@ -39,6 +45,17 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 const malformed: Failure = { ok: false, status: 0, code: "" };
 
+// Copies only the seven listed fields; `kind` is always "official" (Aria amendment).
+function homeCard(value: unknown): HomeCard | null {
+  const card = record(value);
+  if (!card || (card.quarter !== 1 && card.quarter !== 2)) return null;
+  const { id, slug, course, course_label, quarter_label, header } = card;
+  if (typeof id !== "string" || typeof slug !== "string" || typeof course !== "string" ||
+      typeof course_label !== "string" || typeof quarter_label !== "string" ||
+      typeof header !== "string") return null;
+  return { id, slug, course, course_label, quarter: card.quarter, quarter_label, header };
+}
+
 export async function getHome(): Promise<Result<HouseholdHome>> {
   const result = await request("/api/home", "GET");
   if (!result.ok) return result;
@@ -46,11 +63,18 @@ export async function getHome(): Promise<Result<HouseholdHome>> {
   if (!row || (row.role !== "parent" && row.role !== "student") ||
       typeof row.first_name !== "string" || typeof row.needs_parent !== "boolean" ||
       !Array.isArray(row.children)) return malformed;
-  const children: { first_name: string }[] = [];
+  const children: HomeChild[] = [];
   for (const child of row.children) {
     const item = record(child);
-    if (typeof item?.first_name !== "string") return malformed;
-    children.push({ first_name: item.first_name });
+    if (typeof item?.id !== "string" || typeof item.first_name !== "string" ||
+        !Array.isArray(item.official_cards)) return malformed;
+    const cards: HomeCard[] = [];
+    for (const value of item.official_cards) {
+      const card = homeCard(value);
+      if (!card) return malformed;
+      cards.push(card);
+    }
+    children.push({ id: item.id, first_name: item.first_name, official_cards: cards });
   }
   return { ok: true, data: {
     role: row.role, first_name: row.first_name, needs_parent: row.needs_parent, children,

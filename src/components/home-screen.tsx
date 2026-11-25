@@ -1,33 +1,44 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { childGmailError } from "@/lib/form-checks";
-import { AuthFailure, authPost } from "@/lib/auth-client";
+import { useEffect, useState } from "react";
 import { AccountGate } from "@/components/account-gate";
-import { Lines, Shell } from "@/components/shell";
+import { AppShell, HomeSkeleton, type Account } from "@/components/app-shell";
+import { CourseGroups } from "@/components/guides";
+import { Greeting, HeroCard } from "@/components/hero-card";
+import { ArrowRightIcon, CheckIcon, StudentIcon } from "@/components/icons";
+import { InviteCard } from "@/components/invite-card";
+import { LUMI_ALT, LumiImage } from "@/components/lumi-image";
 import { StudentHome } from "@/components/student-home";
+import { Card, EmptyState, StatusLine, Steps } from "@/components/ui";
 import { getHome, homeRedirect, type HouseholdHome } from "@/lib/m2-client";
+
+const HOW_IT_WORKS = [
+  ["Send a connect email", "Enter your child’s Gmail. The link lasts 7 days."],
+  ["Your child accepts", "They sign in or create a student account, then accept the link."],
+  ["Learn together", "Their guides show up on your home and on theirs."],
+] as const;
 
 export function HomeScreen() {
   return (
     <AccountGate page="home">
-      {(me) =>
+      {(me, retry) =>
         me.role === "student" ? (
           me.has_main_parent && me.first_name?.trim() ? (
-            <StudentHome firstName={me.first_name} />
+            <StudentHome firstName={me.first_name} retry={retry} />
           ) : null
         ) : (
-          <ParentHome />
+          <ParentHome account={{ name: me.first_name?.trim() ?? "", role: "parent" }} />
         )
       }
     </AccountGate>
   );
 }
 
-function ParentHome() {
+function ParentHome({ account }: { account: Account }) {
   const [home, setHome] = useState<HouseholdHome | null>(null);
   const [phase, setPhase] = useState<"loading" | "error" | "ready" | "redirecting">("loading");
   const [attempt, setAttempt] = useState(0);
+  const [leaving, setLeaving] = useState(false);
   useEffect(() => {
     let cancelled = false;
     setPhase("loading"); setHome(null);
@@ -45,143 +56,64 @@ function ParentHome() {
     })();
     return () => { cancelled = true; };
   }, [attempt]);
-  if (phase === "ready" && home) return <HomeForm home={home} />;
-  return <Shell signedIn busy={phase !== "error"}>
-    {phase === "error" ? <div className="stack">
-      <p className="status is-error" aria-live="polite">We could not open your home. Try again.</p>
-      <button type="button" className="button-primary" autoFocus onClick={() => setAttempt((v) => v + 1)}>Try again</button>
-    </div> : <><p className="visually-hidden">Loading</p><Lines count={4} /></>}
-  </Shell>;
-}
 
-function HomeForm({ home }: { home: HouseholdHome }) {
-  const [email, setEmail] = useState("");
-  const [fieldError, setFieldError] = useState("");
-  const [status, setStatus] = useState("");
-  const [sending, setSending] = useState(false);
-  const [leaving, setLeaving] = useState(false);
-  const sendLock = useRef(false);
-  const generation = useRef(0);
-  useEffect(() => () => { generation.current += 1; }, []);
-  const [focus, setFocus] = useState({ id: "", n: 0 });
-  const greeting =
-    home.first_name.trim() ? `Hello, ${home.first_name.trim()}.` : "Hello.";
-
-  useEffect(() => {
-    if (!focus.id) {
-      return;
-    }
-    document.getElementById(focus.id)?.focus();
-  }, [focus]);
-
-  async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (sendLock.current) return;
-    const current = generation.current;
-    const problem = childGmailError(email);
-    if (problem) {
-      setFieldError(problem);
-      setStatus("");
-      setFocus((current) => ({ id: "child-gmail", n: current.n + 1 }));
-      return;
-    }
-    setFieldError("");
-    setStatus("");
-    setSending(true);
-    sendLock.current = true;
-    let result: { ok: true; invited_email: string } | { ok: false; status: number; message: string; field: string | null };
-    try {
-      const body = await authPost("/api/invites", { invited_email: email.trim() });
-      if (typeof body.invited_email !== "string" || !body.invited_email.trim() || body.invited_email.includes("://") || /\s/.test(body.invited_email)) throw new AuthFailure("INTERNAL");
-      result = { ok: true, invited_email: body.invited_email };
-    } catch (error) {
-      const code = error instanceof AuthFailure ? error.code : "";
-      const messages: Record<string, string> = {
-        INVALID_EMAIL: "Enter a Gmail address ending in @gmail.com or @googlemail.com.",
-        ROLE_FORBIDDEN: "Only a parent can send a connect email.",
-        RATE_LIMITED: "You have sent too many connect emails this hour. Wait and try again.",
-        EMAIL_FAILED: "The connect email could not be sent. Nothing was saved. Try again.",
-        EMAIL_NOT_CONFIGURED: "Connect email is not set up yet. Nothing was sent, and no link is shown.",
-      };
-      result = { ok: false, status: error instanceof AuthFailure ? error.status : 0, message: messages[code] ?? "The connect email could not be sent. Try again.", field: code === "INVALID_EMAIL" ? "invited_email" : null };
-    } finally {
-      if (current === generation.current) { sendLock.current = false; setSending(false); }
-    }
-    if (current !== generation.current) return;
-    if (!result.ok) {
-      if (result.status === 401) {
-        setEmail("");
-        setStatus("");
-        setLeaving(true);
-        window.location.replace("/login");
-        return;
-      }
-      setSending(false);
-      sendLock.current = false;
-      if (result.field === "invited_email") {
-        setFieldError(result.message);
-        setFocus((current) => ({ id: "child-gmail", n: current.n + 1 }));
-        return;
-      }
-      setStatus(result.message);
-      return;
-    }
-    setSending(false);
-    sendLock.current = false;
-    setEmail("");
-    setStatus(`Connect email sent to ${result.invited_email}.`);
+  // Invite 401: no private copy is left on screen before /login opens.
+  if (leaving) return <HomeSkeleton />;
+  if (phase === "error") {
+    return (
+      <AppShell account={account}>
+        <section className="card stack">
+          <StatusLine tone="error">We could not open your home. Try again.</StatusLine>
+          <button type="button" className="button-primary" autoFocus onClick={() => setAttempt((v) => v + 1)}>Try again</button>
+        </section>
+      </AppShell>
+    );
   }
+  if (phase !== "ready" || !home) return <HomeSkeleton account={account} />;
 
-  if (leaving) return <Shell signedIn busy><Lines count={4} /></Shell>;
+  const linked = home.children.length > 0;
+  const rail = (
+    <Card id="how-title" title="How Lumio works">
+      <LumiImage pose="lumi-star" alt="" size="sm" className="card-art" />
+      <Steps items={HOW_IT_WORKS} />
+    </Card>
+  );
   return (
-    <Shell signedIn>
-      <div className="stack">
-        <h1 className="page-title display-text">Home</h1>
-        <p className="greeting">{greeting}</p>
-        {home.children.length === 0 ? <p className="body-copy">No child is linked yet.</p> :
-          <section aria-labelledby="linked-children-title">
-            <h2 id="linked-children-title" className="form-legend display-text">Linked children</h2>
-            <ul className="linked-children">{home.children.map((child, index) => <li key={index}>{child.first_name}</li>)}</ul>
-          </section>}
-        <form className="stack" method="post" noValidate aria-busy={sending} onSubmit={(event) => void onSubmit(event)}>
-          <fieldset className="stack">
-            <legend className="form-legend display-text">Connect a child</legend>
-            <div className="field">
-              <label className="label" htmlFor="child-gmail">
-                Child{"\u2019"}s Gmail
-              </label>
-              <input
-                id="child-gmail"
-                type="email"
-                autoComplete="username"
-                placeholder="name@gmail.com"
-                value={email}
-                aria-invalid={fieldError ? true : undefined}
-                aria-describedby={
-                  fieldError ? "child-gmail-help child-gmail-error" : "child-gmail-help"
-                }
-                onChange={(event) => {
-                  setEmail(event.target.value);
-                  setFieldError("");
-                }}
-              />
-              <p id="child-gmail-help" className="helper">
-                We send one link to that Gmail. It lasts 7 days. Your child still cannot study
-                until they accept.
-              </p>
-              <p id="child-gmail-error" className="field-error">
-                {fieldError}
-              </p>
-            </div>
-            <button type="submit" className="button-primary" disabled={sending}>
-              {sending ? "Sending\u2026" : "Send connect email"}
-            </button>
-            <p className="status" aria-live="polite">
-              {status}
-            </p>
-          </fieldset>
-        </form>
-      </div>
-    </Shell>
+    <AppShell account={account} rail={rail}>
+      <HeroCard
+        title={<Greeting name={home.first_name} />}
+        sub={linked ? "Here’s your family in Lumio." : "Let’s connect your child’s account."}
+        actions={linked ? null : <a className="button-primary" href="#invite-title">Connect your child<ArrowRightIcon /></a>}
+        pose="lumi-welcome"
+        alt={LUMI_ALT["lumi-welcome"]}
+      />
+      {linked ? (
+        <section className="children" aria-labelledby="children-title">
+          <h2 id="children-title" className="section-title">Your children</h2>
+          <ul className="linked-children">
+            {home.children.map((child) => (
+              <li key={child.id} className="card child-card">
+                <div className="child-head">
+                  <span className="avatar"><StudentIcon /></span>
+                  <h3 className="child-name">{child.first_name}</h3>
+                  <span className="status-tag"><CheckIcon size={16} />Connected</span>
+                </div>
+                <p className="muted">Guides</p>
+                {child.official_cards.length ? <CourseGroups compact cards={child.official_cards} /> : (
+                  <p className="muted">No guides are listed for {child.first_name} yet.</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : (
+        <section className="card">
+          <EmptyState pose="lumi-hello" alt={LUMI_ALT["lumi-hello"]} title="No child is linked yet." level={2}>
+            <p>Send a connect email below. When your child accepts it, they’ll show up here with their guides.</p>
+          </EmptyState>
+        </section>
+      )}
+      <InviteCard onSignedOut={() => setLeaving(true)} />
+    </AppShell>
   );
 }
