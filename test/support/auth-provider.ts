@@ -23,7 +23,8 @@ export const provider = {
   usedProofs: new Set<string>(),
   clientOptions: [] as Record<string, unknown>[],
   rotations: [] as Cookie[][],
-  readError: null as { code: string; status: number } | null,
+  // SDK `result.error` shape for getUser: status 0 is a network failure, a missing status is AuthUnknownError.
+  readError: null as { code?: string; status?: number; name?: string } | null,
 };
 
 type Cookie = { name: string; value: string; options?: Record<string, unknown> };

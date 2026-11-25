@@ -5,7 +5,7 @@ import { emailKey, sessionEmail } from "@/domain/email-key";
 import type { Role, SessionUser } from "@/domain/types";
 import { clearServerAuthCookies, createSupabaseServerClient } from "@/lib/supabase/server";
 import { AppError } from "@/services/errors";
-import { providerFailure } from "@/services/auth";
+import { isTransientAuthError, providerFailure } from "@/services/auth";
 
 export type ParentCaller = {
   id: string;
@@ -31,7 +31,11 @@ const UUID =
 export async function requireUser(request: Request): Promise<SessionUser> {
   const supabase = await createSupabaseServerClient(request);
   try { return await userFromClient(supabase); }
-  catch (error) { await clearServerAuthCookies(); throw error; }
+  catch (error) {
+    // Transient provider failures (503/429) keep the session cookies.
+    if (!(error instanceof AppError && (error.httpStatus === 429 || error.httpStatus === 503))) await clearServerAuthCookies();
+    throw error;
+  }
 }
 
 export async function endSession(request: Request): Promise<SessionUser> {
@@ -49,7 +53,7 @@ export async function userFromClient(supabase: SupabaseClient): Promise<SessionU
   try { result = await supabase.auth.getUser(); }
   catch (error) { throw providerFailure(error); }
   const { data, error } = result;
-  if (error && (error.status === 429 || (error.status ?? 0) >= 500)) throw providerFailure(error);
+  if (error && isTransientAuthError(error)) throw providerFailure(error);
   if (error || !data.user) {
     throw new AppError("UNAUTHENTICATED", 401, "Sign in is required.", null);
   }

@@ -5,6 +5,7 @@ import {
   cookieJar, credential, defaultUser, installProviderFixture, origin, provider,
   refreshCredential, rememberSetCookie, request, resetProviderFixture, sessionCookie,
 } from "./support/auth-provider.ts";
+import { cookieWrites } from "./support/cookies.ts";
 import { inserts, profiles } from "./support/memory-db.ts";
 
 installProviderFixture();
@@ -308,23 +309,115 @@ test("cross-device confirmation with no signup intent asks for role instead of i
   assert.equal(inserts.length, 0);
 });
 
-test("schema-valid existing profile without name or role can finish onboarding exactly once", async () => {
+// ARIA_AUTH_DECISIONS_v1 A1: profiles are insert-only, so a null-role row is read as "no role chosen" and never completed.
+test("schema-valid null-role profile routes to /role and is never completed or changed", async () => {
   profiles.push({ id: defaultUser.id, email: defaultUser.email, email_key: defaultUser.email, first_name: null, role: null });
-  await post("sign-in", { email: defaultUser.email, password: "fixture-password" }); await context();
+  const signedIn = await post("sign-in", { email: defaultUser.email, password: "fixture-password" });
+  assert.equal(signedIn.status, 200); assert.equal((await body(signedIn)).next, "/role");
   assert.equal((await body(await context())).next, "/role");
-  const completed = await route("/api/profile", { first_name: "Ada", role: "student" });
-  assert.equal(completed.status, 201);
-  assert.equal((await body(completed)).role, "student");
-  assert.equal(profiles.length, 1); assert.equal(profiles[0]?.first_name, "Ada");
-  assert.equal((await body(await context())).next, "/wait");
-  await failure(await route("/api/profile", { first_name: "Changed", role: "parent" }), 409, "ROLE_ALREADY_SET");
-  assert.equal(profiles[0]?.role, "student"); assert.equal(profiles[0]?.first_name, "Ada");
+  const me = await route("/api/me"); assert.equal(me.status, 200);
+  assert.deepEqual(await body(me), { id: defaultUser.id, role: null, first_name: null, email: defaultUser.email, has_main_parent: false });
+  await failure(await route("/api/profile", { first_name: "Ada", role: "student" }), 409, "ROLE_ALREADY_SET");
+  assert.equal(profiles.length, 1); assert.equal(profiles[0]?.role, null); assert.equal(profiles[0]?.first_name, null);
+  assert.equal(inserts.length, 0);
+  assert.equal((await body(await context())).next, "/role");
 });
 
 test("checked-in schema forbids a chosen role with a null or blank name", () => {
   const migration = readFileSync(new URL("../supabase/migrations/20261012120000_profiles.sql", import.meta.url), "utf8");
   assert.match(migration, /profiles_role_requires_name_check\s+check\s*\(\s*role is null or first_name is not null/);
   assert.match(migration, /char_length\(btrim\(first_name\)\) between 1 and 40/);
+});
+
+// ARIA_AUTH_DECISIONS_v1 C2: the lumio_auth_v1 marker slides on authenticated context only.
+const MARKER = "lumio_auth_v1";
+const markerLine = (response: Response) => response.headers.getSetCookie().find(line => line.startsWith(`${MARKER}=`));
+const markerValue = () => cookieJar.find(c => c.name === MARKER)?.value;
+const expiresSession = (response: Response) => response.headers.getSetCookie().some(line => line.startsWith(`${sessionCookie}=`) && /Max-Age=0/i.test(line));
+async function signIn() {
+  assert.equal((await post("sign-in", { email: defaultUser.email, password: "fixture-password" })).status, 200);
+  cookieWrites.length = 0;
+}
+
+test("authenticated context renews lumio_auth_v1 with a fresh 7-day Max-Age", async () => {
+  await signIn();
+  const previous = markerValue(); assert.ok(previous);
+  const response = await context();
+  assert.equal((await body(response)).authenticated, true);
+  const line = markerLine(response);
+  assert.ok(line, "an authenticated context response re-sets the marker");
+  assert.match(line, /Max-Age=604800/i); assert.match(line, /HttpOnly/i); assert.match(line, /SameSite=Lax/i); assert.match(line, /Path=\//i);
+  assert.notEqual(markerValue(), previous);
+});
+
+test("a marker sealed 6 days 23 hours ago slides: context stays authenticated and the new marker lasts 7 days from now", async (t) => {
+  const { openState, TTL } = await import("../src/lib/auth-state.ts");
+  const start = Date.now();
+  const clock = t.mock.method(Date, "now", () => start - (6 * 86400 + 23 * 3600) * 1000);
+  await signIn();
+  const old = markerValue(); assert.ok(old);
+  clock.mock.mockImplementation(() => start);
+  const response = await context();
+  assert.equal((await body(response)).authenticated, true);
+  assert.ok(markerLine(response));
+  const renewed = markerValue(); assert.ok(renewed); assert.notEqual(renewed, old);
+  // The sign-in marker would end the session an hour from now; the renewed one runs a full TTL from now.
+  clock.mock.mockImplementation(() => start + 3601 * 1000);
+  assert.equal(openState("marker", old), null);
+  assert.notEqual(openState("marker", renewed), null);
+  clock.mock.mockImplementation(() => start + (TTL.marker - 60) * 1000);
+  assert.notEqual(openState("marker", renewed), null);
+  clock.mock.mockImplementation(() => start + (TTL.marker + 1) * 1000);
+  assert.equal(openState("marker", renewed), null);
+  // Past the old 7-day-from-sign-in cap, an active session is still authenticated.
+  clock.mock.mockImplementation(() => start + 2 * 86400 * 1000);
+  assert.equal((await body(await context())).authenticated, true);
+});
+
+test("anonymous and rejected-session context never renew the marker", async () => {
+  // beforeEach already installed a valid marker for this anonymous browser.
+  const anonymous = await context();
+  assert.equal((await body(anonymous)).authenticated, false);
+  assert.equal(markerLine(anonymous), undefined);
+  await signIn(); provider.readError = { code: "session_not_found", status: 403 };
+  const rejected = await context();
+  assert.equal((await body(rejected)).authenticated, false);
+  assert.equal(markerLine(rejected), undefined);
+  assert.equal(expiresSession(rejected), true);
+});
+
+// ARIA_AUTH_DECISIONS_v1 B1: only an identity rejection signs the user out; transient failures keep cookies.
+test("context during a provider outage answers 503 and keeps the session for the retry", async () => {
+  await signIn(); provider.readError = { status: 0 };
+  const outage = await context();
+  await failure(outage, 503, "AUTH_UNAVAILABLE");
+  assert.equal(expiresSession(outage), false);
+  assert.ok(cookieJar.some(c => c.name === sessionCookie && c.value === credential));
+  provider.readError = null;
+  assert.equal((await body(await context())).authenticated, true);
+});
+
+const sessionCleared = () => cookieWrites.some(w => w.name === sessionCookie && !w.value && w.options?.maxAge === 0);
+for (const [label, readError, status, code] of [
+  ["provider 503", { status: 503 }, 503, "AUTH_UNAVAILABLE"],
+  ["network status 0", { status: 0 }, 503, "AUTH_UNAVAILABLE"],
+  ["rate limit 429", { code: "over_request_rate_limit", status: 429 }, 429, "RATE_LIMITED"],
+] as const) {
+  test(`/api/me keeps the session on transient provider failure: ${label}`, async () => {
+    await signIn(); provider.readError = { ...readError };
+    await failure(await route("/api/me"), status, code);
+    assert.equal(sessionCleared(), false);
+    assert.ok(cookieJar.some(c => c.name === sessionCookie && c.value === credential));
+    provider.readError = null;
+    assert.equal((await route("/api/me")).status, 200);
+  });
+}
+
+test("/api/me clears the session when the provider rejects the identity (401)", async () => {
+  await signIn(); provider.readError = { code: "bad_jwt", status: 401 };
+  await failure(await route("/api/me"), 401, "UNAUTHENTICATED");
+  assert.equal(sessionCleared(), true);
+  assert.equal(cookieJar.some(c => c.name === sessionCookie), false);
 });
 
 for (const continuation of ["//attacker.test", "/%68ome", "/home?next=//attacker.test", "/connect/short", "/home/../role"]) {
