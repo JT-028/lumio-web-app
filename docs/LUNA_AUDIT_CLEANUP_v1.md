@@ -6,7 +6,7 @@ Date: 26 November 2026.
 
 ## Summary
 
-0 CRITICAL, 0 HIGH, 1 MED and 3 LOW findings are open. Luna fixed 2 more LOW findings.
+0 CRITICAL, 0 HIGH, 1 MED and 2 LOW findings are open. Luna fixed 2 more LOW findings, and a later Dep commit resolved the CI finding.
 **Overall status: PASS.** The code gate is clear. The open MED item is a check against real Postgres that nobody has run yet. It is not a defect.
 
 The change does five things:
@@ -59,11 +59,13 @@ Issue: `created_at` used to come from the app's `toISOString()`, so `expires_at`
 Risk: There is no break. The mail prints the raw timestamp to the recipient, as it did before, now with three more digits.
 Fix: None needed for this change. If the mail should show a readable date, that is a copy change for Aria and Iris. Deferred.
 
-### LOW. CI does not use the new portability
+### LOW (resolved). CI does not use the new portability
 File: `.github/workflows/ci.yml`.
 Issue: The test job still copies the checkout to `D:\PORTFOLIO\booklet-web-app\lumio-web-app`, and its header comment says `test/m1-repo.test.ts` needs that path. The test now finds the root from `import.meta.url`, so the copy step is unnecessary. CI also runs only `npm run typecheck`, which excludes `test/`, so the test typecheck that is now clean is not enforced.
 Risk: CI stays tied to Windows and a fixed drive path, and a type error in `test/**` can merge.
 Fix: Remove the robocopy step and the `working-directory` overrides, and run `npm ci` and `npm test` in the workspace. Add a `npx tsc --noEmit -p test/tsconfig.json` step to the lint job. Luna did not edit CI. Owner: Dep.
+Resolved by the `ci:` commit on top of `2557158`. Every job runs on `ubuntu-latest` in the plain checkout, the robocopy step and both `working-directory` lines are gone, and the lint job runs `npm run typecheck:test`. Luna checked it: the YAML parses in strict mode, triggers, permissions, `needs`, pinned SHAs and the deploy job are unchanged, and `typecheck:test` exits 0.
+Unverified until the first ubuntu run: `npm ci`, `npm test` and `next build` on Linux, and Node 24.18.0 (local checks ran on Windows with Node 26.12.1).
 
 ### LOW (fixed). `m2-client.ts` still accepted POST and accept-only codes
 File: `src/lib/m2-client.ts`.
@@ -116,7 +118,7 @@ Every touched file has CRLF in the working tree and LF in the index, like the re
 - If PostgREST does not see the function, run `notify pgrst, 'reload schema';`.
 - Smoke test: one invite send returns 201 and one mail.
 - Rolling back the code alone is not enough. The old code needs `grant insert on table public.connect_invites to service_role`, and that grant brings back the count-then-insert race. Roll back both or neither.
-- CI follow-up (Dep): see the CI finding above. Remove the `D:\PORTFOLIO` copy step and add the test typecheck.
+- CI follow-up (Dep): resolved. See the CI finding above. The first ubuntu run still has to pass.
 
 ## Plugin gate
 
