@@ -87,21 +87,15 @@ export function assertNoFocusStops(selector: string): void {
   }
 }
 
-// happy-dom 20.10.6: when a <form> gets its subtree before it is attached (React
-// always does this), form.contains(), closest("form") and compareDocumentPosition()
-// answer wrongly. querySelectorAll still walks the real tree, so measure with it.
-
 /** `node` is a descendant of `container`. */
 export function within(container: Element, node: Element): boolean {
-  return [...container.querySelectorAll("*")].includes(node);
+  return container !== node && container.contains(node);
 }
 
 /** `first` comes before `second` in document order (an ancestor comes before its descendants). */
 export function precedes(first: Element, second: Element): boolean {
-  const all = [...document.querySelectorAll("*")];
-  const a = all.indexOf(first);
-  const b = all.indexOf(second);
-  return a !== -1 && b !== -1 && a < b;
+  return first.isConnected && second.isConnected
+    && Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
 }
 
 export function guideTexts(scope: ParentNode = document): string[] {

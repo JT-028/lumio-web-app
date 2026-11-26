@@ -47,7 +47,7 @@ const stylesheet = readFileSync(new URL("../../src/app/globals.css", import.meta
 const style = dom.document.createElement("style");
 dom.document.head.appendChild(style);
 
-// happy-dom 20 drops every rule inside an `@layer` block and cannot resolve
+// happy-dom 20 and 21.0.4 drop every rule inside an `@layer` block and cannot resolve
 // `clamp()`. A browser does both, so the copy loaded here unwraps the layers
 // (source order kept) and resolves each clamp() of px/rem/vw terms for the
 // current viewport. globals.css itself is loaded unchanged otherwise.

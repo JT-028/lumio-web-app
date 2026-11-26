@@ -6,7 +6,7 @@ Date: 26 November 2026.
 
 ## Summary
 
-0 CRITICAL, 0 HIGH, 1 MED and 2 LOW findings are open. Luna fixed 2 more LOW findings, and a later Dep commit resolved the CI finding.
+0 CRITICAL, 0 HIGH, 1 MED and 2 LOW findings are open. Luna fixed 2 more LOW findings, and a later Dep commit resolved the CI finding. The happy-dom 21.0.4 bump cleared the `npm audit` failure.
 **Overall status: PASS.** The code gate is clear. The open MED item is a check against real Postgres that nobody has run yet. It is not a defect.
 
 The change does five things:
@@ -72,6 +72,16 @@ File: `test/support/auth-provider.ts`.
 Issue: The first ubuntu run, on Node 24.18.0, failed 14 tests in `test/auth-recovery-handlers.test.ts` with 503 where 200 was expected. The Windows run at `314997b` failed the same 14, so the failures are older than this branch. `@supabase/supabase-js` maps `import` to `dist/index.mjs` and `require` to `dist/index.cjs`. tsx loads this CommonJS-typed project through `require()`. Without the nodejs/node#58231 fix, a bare-specifier `mock.module()` covers only the ESM entry, so `isolatedAuthClient()` got the real SDK. Its fetch hit the fixture's "Live network is forbidden" guard, and `src/services/auth.ts` line 57 answered `unavailable()`. `@supabase/ssr` has no `exports` map, so its bare mock already covered both loaders.
 Risk: None in production. Next bundles the SDK there, and nothing is mocked. In CI, the handler tests fail on any Node that lacks the fix.
 Fix applied: The fixture mocks the same `createClient` object a second time, under the `file:` URL of the `require()` entry. Without that line, Node 24.18.0 fails exactly those 14 tests and Node 26.12.1 passes all 60. With it, both pass 60 of 60 and `test/auth-recovery-middleware.test.ts` passes 28 of 28, so the second registration does not clash on Node 26.
+
+### MED (fixed). `npm audit` failed on happy-dom 20.10.6
+File: `package.json`, `package-lock.json`, `test/support/ui.ts`, `test/support/dom.ts`.
+Issue: Ubuntu CI run 45846626532 passed lint, test and build. Its security-scan job failed because `npm audit` found 1 high in the dev dependency `happy-dom` 20.10.6. The advisories are GHSA-834v-8h66-3h79, fixed in 21.0.4, GHSA-c8p4-j97h-3vg8, fixed in 21.0.0, and GHSA-5fpq-26gf-qwcr, fixed in 20.14.6. No 20.x release fixes all three.
+Risk: happy-dom runs only in tests, so production is not exposed. The failed job blocks CI.
+Fix applied: The owner approved the major bump, and `happy-dom` is now pinned to exactly `21.0.4`.
+- The lockfile changes only the happy-dom entry. Its version, `resolved` URL on registry.npmjs.org and `integrity` match `npm view happy-dom@21.0.4`. The dependency list and `engines` (`node >=20.0.0`) are the same as in 20.10.6, so no other package moved.
+- `test/support/ui.ts`: 20.10.6 gave wrong answers from `contains()`, `closest()` and `compareDocumentPosition()` for a form that React builds detached and then attaches. 21.0.4 answers correctly, so `within` and `precedes` now call `contains()` and `compareDocumentPosition()` instead of walking `querySelectorAll("*")`. A 16-case probe on Node 24.18.0 gave the expected answer in every case. `precedes` still returns false for a detached node, for the wrong order and for the same node.
+- `test/support/dom.ts`: the `@layer` and `clamp()` workaround stays. A probe on 21.0.4 still returns an empty computed value for a rule inside `@layer` and for a `clamp()` value. Only the comment changed.
+Checks: `npm audit` reports 0 vulnerabilities and `npm ci --dry-run` is clean. Both typechecks exit 0. `test/auth-recovery-ui.test.tsx` passes 38 of 38 on Node 24.18.0. Quinn's full `npm test` passed 317 of 317 on Node 24.18.0 and on 26.12.1, with 97.04% lines and 90.72% branches.
 
 ### LOW (fixed). `m2-client.ts` still accepted POST and accept-only codes
 File: `src/lib/m2-client.ts`.
