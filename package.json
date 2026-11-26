@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start --port 3010",
     "typecheck": "tsc --noEmit",
-    "test": "set TSX_TSCONFIG_PATH=test/tsconfig.json&& node --experimental-test-module-mocks --test-isolation=process --import tsx --test --test-concurrency=1 --experimental-test-coverage --test-coverage-include=src/**/*.ts --test-coverage-include=src/**/*.tsx \"test/**/*.test.ts\" \"test/**/*.test.tsx\""
+    "test": "node --env-file=test/tsx.env --experimental-test-module-mocks --test-isolation=process --import tsx --test --test-concurrency=1 --experimental-test-coverage \"--test-coverage-include=src/**/*.ts\" \"--test-coverage-include=src/**/*.tsx\" \"test/**/*.test.ts\" \"test/**/*.test.tsx\""
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",

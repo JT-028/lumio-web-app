@@ -2,7 +2,7 @@ import "./support/dom.ts";
 import React, { act, type ReactNode } from "react";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { afterEach, beforeEach, mock, test } from "node:test";
+import { afterEach, beforeEach, test } from "node:test";
 import { createRoot, type Root } from "react-dom/client";
 import type { Me } from "../src/domain/types.ts";
 import { dom, navigations, setViewport, typeInto } from "./support/dom.ts";
@@ -12,20 +12,6 @@ import {
 } from "./support/ui.ts";
 
 // Auth regressions migrated to auth-recovery-ui.test.tsx and real-handler tests.
-mock.module("@/lib/supabase/browser", { exports: { browserSupabase() { throw new Error("browser auth retired"); } } });
-
-dom.matchMedia = ((query: string) => ({
-  matches: query.includes("prefers-reduced-motion"),
-  media: query,
-  onchange: null,
-  addListener() {},
-  removeListener() {},
-  addEventListener() {},
-  removeEventListener() {},
-  dispatchEvent() {
-    return false;
-  },
-})) as typeof dom.matchMedia;
 
 const fetches: { url: string; method: string }[] = [];
 const profilePosts: unknown[] = [];
@@ -33,6 +19,8 @@ const invitePosts: unknown[] = [];
 let meStatus = 401;
 let meBody: Me | null = null;
 let profileBody: Me | null = null;
+// When set, POST /api/profile answers with this error envelope instead.
+let profileFault: { status: number; code: string } | null = null;
 let inviteStatus = 201;
 let inviteCode = "";
 
@@ -74,6 +62,10 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (url.endsWith("/api/profile") && method === "POST") {
     profilePosts.push(init?.body ? JSON.parse(String(init.body)) : null);
+    if (profileFault) {
+      return Response.json({ error: { code: profileFault.code, message: "synthetic-private-fault", details: null } },
+        { status: profileFault.status });
+    }
     if (!profileBody) {
       return new Response(
         JSON.stringify({
@@ -86,6 +78,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
         { status: 409, headers: { "content-type": "application/json" } },
       );
     }
+    // The account now has its role, so the next context and /api/me read it.
+    meBody = profileBody;
     return new Response(JSON.stringify(profileBody), {
       status: 201,
       headers: { "content-type": "application/json" },
@@ -204,6 +198,7 @@ beforeEach(() => {
   meStatus = 401;
   meBody = null;
   profileBody = null;
+  profileFault = null;
   inviteStatus = 201;
   inviteCode = "";
   document.documentElement.classList.remove("fonts-ready");
@@ -364,14 +359,93 @@ test("the role form offers parent and student and never offers teacher", async (
   assertTagline();
 });
 
+/** Pick a role card, type a first name (when given) and submit the /role form. */
+async function submitRole(role: "parent" | "student" | null, firstName: string | null): Promise<void> {
+  if (role) await act(async () => (document.getElementById(`role-${role}`) as HTMLInputElement).click());
+  if (firstName !== null) await typeInto(document.getElementById("first-name") as HTMLInputElement, firstName);
+  const form = document.querySelector("form");
+  assert.ok(form);
+  await act(async () => {
+    form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+}
+
+for (const [role, next] of [["parent", "/home"], ["student", "/wait"]] as const) {
+  test(`saving the ${role} role posts the trimmed name once and opens ${next}`, async () => {
+    meStatus = 200;
+    meBody = noRole;
+    profileBody = { ...noRole, role, first_name: "Ada" };
+    const { RoleScreen } = await import("../src/components/role-screen.tsx");
+    await render(<RoleScreen />);
+    await submitRole(role, "  Ada  ");
+    assert.deepEqual(profilePosts, [{ first_name: "Ada", role }]);
+    assert.deepEqual(navigations, [next]);
+    assert.equal(normalize(document.getElementById("role-status")?.textContent), "");
+  });
+}
+
+test("an empty role form names both problems, focuses the name and posts nothing", async () => {
+  meStatus = 200;
+  meBody = noRole;
+  const { RoleScreen } = await import("../src/components/role-screen.tsx");
+  await render(<RoleScreen />);
+  await submitRole(null, null);
+  assert.equal(normalize(document.getElementById("role-error")?.textContent), "Choose Parent or Student.");
+  assert.equal(normalize(document.getElementById("name-error")?.textContent), "Enter your first name.");
+  assert.equal(document.activeElement?.id, "first-name");
+  assert.deepEqual(profilePosts, []);
+  assert.deepEqual(navigations, []);
+});
+
+test("a failed role save says so, keeps the form, and a retry that succeeds opens home", async () => {
+  meStatus = 200;
+  meBody = noRole;
+  profileFault = { status: 500, code: "INTERNAL" };
+  const { RoleScreen } = await import("../src/components/role-screen.tsx");
+  await render(<RoleScreen />);
+  await submitRole("parent", "Ada");
+  assert.equal(normalize(document.getElementById("role-status")?.textContent), "Your role could not be saved. Try again.");
+  assert.equal(document.activeElement?.id, "role-status");
+  assert.doesNotMatch(text(), /synthetic-private-fault/);
+  assert.ok(document.getElementById("first-name"), "the form stays for a retry");
+  assert.deepEqual(navigations, []);
+
+  profileFault = null;
+  profileBody = { ...noRole, role: "parent", first_name: "Ada" };
+  await submitRole(null, null);
+  assert.equal(profilePosts.length, 2);
+  assert.deepEqual(navigations, ["/home"]);
+});
+
+test("a role saved elsewhere locks the form, then Check again follows the saved account", async () => {
+  meStatus = 200;
+  meBody = noRole;
+  const { RoleScreen } = await import("../src/components/role-screen.tsx");
+  await render(<RoleScreen />);
+  // profileBody stays null, so the save answers 409 ROLE_ALREADY_SET while the context still says /role.
+  await submitRole("student", "Lin");
+  assert.equal(normalize(document.getElementById("role-status")?.textContent), "We could not check your account. Check again.");
+  assert.equal(document.getElementById("first-name"), null, "a saved role cannot be chosen again");
+  assert.deepEqual(navigations, []);
+
+  meBody = { ...student, has_main_parent: true };
+  const check = [...document.querySelectorAll("button")].find((button) => normalize(button.textContent) === "Check again");
+  assert.ok(check);
+  await act(async () => {
+    check.click();
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+  assert.deepEqual(navigations, ["/home"]);
+  assert.equal(profilePosts.length, 1);
+});
+
 test("a student with no parent is sent to /wait from /home", async () => {
   meStatus = 200;
   meBody = student;
   const { HomeScreen } = await import("../src/components/home-screen.tsx");
-  const { pathForAccount } = await import("../src/lib/lumio-client.ts");
   await render(<HomeScreen />);
   assert.deepEqual(navigations, ["/wait"]);
-  assert.equal(pathForAccount(student), "/wait");
   assert.doesNotMatch(text(), /No child is linked yet|Connect a child|Your guides/);
 });
 
@@ -392,7 +466,7 @@ test("check again on /wait stays there and says the student is still waiting", a
   const form = document.querySelector("form");
   assert.ok(form);
   await act(async () => {
-    form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 30));
   });
   assert.match(text(), /Still waiting for a parent\./);
@@ -408,17 +482,15 @@ test("check again leaves /wait when a parent is linked", async () => {
   meStatus = 200;
   meBody = { ...student };
   const { WaitScreen } = await import("../src/components/wait-screen.tsx");
-  const { pathForAccount } = await import("../src/lib/lumio-client.ts");
   await render(<WaitScreen />);
   assert.match(text(), /Waiting for a parent/);
   meBody = { ...student, has_main_parent: true };
   const form = document.querySelector("form");
   assert.ok(form);
   await act(async () => {
-    form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 30));
   });
-  assert.equal(pathForAccount({ ...student, has_main_parent: true }), "/home");
   assert.deepEqual(navigations, ["/home"]);
   assert.doesNotMatch(text(), /Continue learning|No study time yet/);
 });
@@ -427,12 +499,12 @@ test("a linked student home keeps the sidebar, top bar and hero contract at 320,
   meStatus = 200;
   meBody = { ...student, has_main_parent: true };
   const { HomeScreen } = await import("../src/components/home-screen.tsx");
-  const { pathForAccount } = await import("../src/lib/lumio-client.ts");
-  assert.equal(pathForAccount(meBody), "/home");
   for (const width of [320, 768, 1280]) {
     setViewport(width);
     fetches.length = 0;
     await render(<HomeScreen />);
+    // A linked student belongs on /home, so the screen stays put.
+    assert.deepEqual(navigations, []);
     assertPage();
     const greeting = document.querySelector("h1");
     assert.ok(greeting);
@@ -521,7 +593,7 @@ test("Sign out on the signed-in home posts once and returns to login", async () 
   assert.equal(visible.length, 1);
   assert.ok(visible[0]!.classList.contains("sidebar-sign-out"));
   await act(async () => {
-    visible[0]!.dispatchEvent(new dom.MouseEvent("click", { bubbles: true }));
+    visible[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 30));
   });
   assert.equal(fetches.filter((call) => call.url.endsWith("/api/sign-out") && call.method === "POST").length, 1);
@@ -552,7 +624,7 @@ test("a parent with no child sees no child list, and a connect send shows one li
   assert.ok(form);
   assert.equal(form.getAttribute("aria-labelledby"), "invite-title");
   await act(async () => {
-    form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 30));
   });
   const status = form.querySelector(".status")?.textContent ?? "";
@@ -578,7 +650,7 @@ test("a connect failure does not show a link", async () => {
   const form = document.querySelector("form");
   assert.ok(form);
   await act(async () => {
-    form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true }));
+    form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
     await new Promise((resolve) => setTimeout(resolve, 30));
   });
   const status = form.querySelector(".status")?.textContent ?? "";
@@ -596,7 +668,7 @@ test("sign out returns to the dedicated login route", async () => {
   const button = signOutButtons()[0];
   assert.ok(button);
   await act(async () => {
-    button.dispatchEvent(new dom.MouseEvent("click", { bubbles: true }));
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 30));
   });
   assert.equal(fetches.some((call) => call.url.endsWith("/api/sign-out") && call.method === "POST"), true);

@@ -39,7 +39,6 @@ let emptyIdentities: boolean;
 let throwAuth: boolean;
 let oauthUrl: string | null;
 const authCalls: { name: string; args: unknown }[] = [];
-mock.module("@/lib/supabase/browser", { exports: { browserSupabase() { throw new Error("browser auth retired"); } } });
 mock.module("next/navigation", { exports: { useParams: () => ({ token: fixture }) } });
 
 type Reply = { status: number; body?: unknown; network?: boolean };
@@ -81,15 +80,12 @@ let HomeScreen: typeof import("../src/components/home-screen.tsx").HomeScreen;
 let WaitScreen: typeof import("../src/components/wait-screen.tsx").WaitScreen;
 let getHome: typeof import("../src/lib/m2-client.ts").getHome;
 let getConnectPreview: typeof import("../src/lib/m2-client.ts").getConnectPreview;
-let acceptConnect: typeof import("../src/lib/m2-client.ts").acceptConnect;
 let connectExpiry: typeof import("../src/lib/m2-client.ts").connectExpiry;
-let postInvite: typeof import("../src/lib/lumio-client.ts").postInvite;
 before(async () => {
   ({ ConnectScreen } = await import("../src/components/connect-screen.tsx"));
   ({ HomeScreen } = await import("../src/components/home-screen.tsx"));
   ({ WaitScreen } = await import("../src/components/wait-screen.tsx"));
-  ({ getHome, getConnectPreview, acceptConnect, connectExpiry } = await import("../src/lib/m2-client.ts"));
-  ({ postInvite } = await import("../src/lib/lumio-client.ts"));
+  ({ getHome, getConnectPreview, connectExpiry } = await import("../src/lib/m2-client.ts"));
 });
 let root: Root | null = null;
 const text = () => document.body.textContent ?? "";
@@ -108,7 +104,7 @@ async function render(node: ReactNode) {
 async function click(label: string) { await act(async () => button(label).click()); await settle(); }
 async function submit() {
   const form = document.querySelector("form"); assert.ok(form);
-  await act(async () => { form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true })); });
+  await act(async () => { form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })); });
   await settle();
 }
 async function input(id: string, value: string) { await typeInto(document.getElementById(id) as HTMLInputElement, value); }
@@ -289,12 +285,14 @@ test("parent invite invalid email error is attached to and focuses the field", a
 });
 
 test("invite validation keeps a typed field independent of provider copy", async () => {
+  // No details.field: the code alone puts the fixed sentence on the field, never the server's message.
+  me = parent; homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [] } };
   inviteReply = { status: 400, body: { error: { code: "INVALID_EMAIL", message: fixture } } };
-  const result = await postInvite("child@gmail.com");
-  assert.deepEqual(result, {
-    ok: false, status: 400, field: "invited_email",
-    message: "Enter a Gmail address ending in @gmail.com or @googlemail.com.",
-  });
+  await render(<HomeScreen />); await input("child-gmail", "child@gmail.com"); await submit();
+  assert.equal(document.activeElement?.id, "child-gmail");
+  assert.equal(normalize(document.getElementById("child-gmail-error")?.textContent),
+    "Enter a Gmail address ending in @gmail.com or @googlemail.com.");
+  assert.equal(normalize(document.querySelector(".invite .status")?.textContent), "");
 });
 test("parent invite 401 removes greeting, child list, and form before navigation", async () => {
   me = parent; homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [child("zoe", "Zoe")] } };
@@ -418,13 +416,12 @@ test("waiting network failure stays waiting and retry never assumes linked", asy
   await click("Check again"); assert.match(text(), /Waiting for a parent/); assert.deepEqual(navigations, []);
 });
 test("client adapters discard private fields and reject malformed success", async () => {
+  // Accept has no adapter: ConnectScreen's accept tests cover accepted, ignored and malformed states.
   assert.deepEqual(await getConnectPreview(fixture), { ok: true, data: preview });
-  assert.deepEqual(await acceptConnect(fixture), { ok: true, data: "accepted" });
   homeReply = { status: 200, body: { role: "parent", first_name: "Ada", needs_parent: false, children: [{ first_name: "Lin", email: privateValue, id: privateValue, official_cards: [] }] } };
   assert.deepEqual(await getHome(), { ok: true, data: { role: "parent", first_name: "Ada", needs_parent: false, children: [{ id: privateValue, first_name: "Lin", official_cards: [] }] } });
   homeReply = { status: 200, body: { children: [] } }; assert.equal((await getHome()).ok, false);
   previewReply = { status: 200, body: { state: "sent" } }; assert.equal((await getConnectPreview(fixture)).ok, false);
-  acceptReply = { status: 200, body: { state: "unknown" } }; assert.equal((await acceptConnect(fixture)).ok, false);
 });
 
 test("getHome keeps each child's id, first_name and official_cards in API order, dropping kind, email and study_sets", async () => {

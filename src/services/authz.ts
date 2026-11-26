@@ -38,16 +38,6 @@ export async function requireUser(request: Request): Promise<SessionUser> {
   }
 }
 
-export async function endSession(request: Request): Promise<SessionUser> {
-  const supabase = await createSupabaseServerClient(request);
-  const user = await userFromClient(supabase);
-  const { error } = await supabase.auth.signOut();
-  if (error) {
-    throw new AppError("INTERNAL", 500, "Something went wrong.", null);
-  }
-  return user;
-}
-
 export async function userFromClient(supabase: SupabaseClient): Promise<SessionUser> {
   let result;
   try { result = await supabase.auth.getUser(); }

@@ -15,15 +15,12 @@ export type HouseholdHome = {
   children: HomeChild[];
 };
 
-const codes = new Set([
-  "NOT_FOUND", "LINK_EXPIRED", "ROLE_REQUIRED", "ROLE_NOT_STUDENT",
-  "EMAIL_MISMATCH", "ALREADY_USED",
-]);
+const codes = new Set(["NOT_FOUND", "LINK_EXPIRED", "ROLE_REQUIRED"]);
 
-async function request(path: string, method: "GET" | "POST"): Promise<Result<unknown>> {
+async function request(path: string): Promise<Result<unknown>> {
   try {
     const response = await fetch(path, {
-      method, credentials: "same-origin", cache: "no-store",
+      method: "GET", credentials: "same-origin", cache: "no-store",
       headers: { accept: "application/json" },
       referrerPolicy: "no-referrer",
     });
@@ -57,7 +54,7 @@ function homeCard(value: unknown): HomeCard | null {
 }
 
 export async function getHome(): Promise<Result<HouseholdHome>> {
-  const result = await request("/api/home", "GET");
+  const result = await request("/api/home");
   if (!result.ok) return result;
   const row = record(result.data);
   if (!row || (row.role !== "parent" && row.role !== "student") ||
@@ -82,7 +79,7 @@ export async function getHome(): Promise<Result<HouseholdHome>> {
 }
 
 export async function getConnectPreview(token: string): Promise<Result<ConnectPreview>> {
-  const result = await request(`/api/connect/${encodeURIComponent(token)}`, "GET");
+  const result = await request(`/api/connect/${encodeURIComponent(token)}`);
   if (!result.ok) return result;
   const row = record(result.data);
   if (!row || typeof row.invited_email !== "string" || typeof row.parent_first_name !== "string" ||
@@ -92,13 +89,6 @@ export async function getConnectPreview(token: string): Promise<Result<ConnectPr
     invited_email: row.invited_email, parent_first_name: row.parent_first_name,
     expires_at: row.expires_at, state: row.state,
   } };
-}
-
-export async function acceptConnect(token: string): Promise<Result<"accepted" | "ignored">> {
-  const result = await request(`/api/connect/${encodeURIComponent(token)}/accept`, "POST");
-  if (!result.ok) return result;
-  const state = record(result.data)?.state;
-  return state === "accepted" || state === "ignored" ? { ok: true, data: state } : malformed;
 }
 
 export function homeRedirect(result: Result<HouseholdHome>): "/" | "/role" | null {

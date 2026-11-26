@@ -3,7 +3,7 @@ import React, { act, type ReactNode } from "react";
 import assert from "node:assert/strict";
 import { afterEach, before, beforeEach, mock, test } from "node:test";
 import { createRoot, type Root } from "react-dom/client";
-import { dom, navigations, setViewport, typeInto } from "./support/dom.ts";
+import { navigations, setViewport, typeInto } from "./support/dom.ts";
 import { assertArt, assertCalm, assertPage, focused, isShown, normalize, precedes, within } from "./support/ui.ts";
 import type { AuthContext } from "../src/domain/auth-contract.ts";
 
@@ -11,7 +11,6 @@ mock.module("next/navigation", { exports: {
   useRouter: () => ({ replace: (path: string) => navigations.push(path) }),
   usePathname: () => window.location.pathname,
 } });
-mock.module("@/lib/supabase/browser", { exports: { browserSupabase() { throw new Error("Browser auth must never be used"); } } });
 let AuthScreen: typeof import("../src/components/auth-screen.tsx").AuthScreen;
 let AuthFlowProvider: typeof import("../src/components/auth-flow.tsx").AuthFlowProvider;
 let Landing: typeof import("../src/components/landing.tsx").Landing;
@@ -83,7 +82,7 @@ async function input(id: string, content: string) { assert.ok(value(id), `Missin
 async function click(label: string) { await act(async () => control(label).click()); await settle(); }
 async function submit() {
   const form = document.querySelector("form"); assert.ok(form);
-  await act(async () => { form.dispatchEvent(new dom.Event("submit", { bubbles: true, cancelable: true })); }); await settle();
+  await act(async () => { form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true })); }); await settle();
 }
 async function chooseRole(role: "parent" | "student") {
   await act(async () => value(`role-${role}`).click()); await click("Continue");
@@ -168,7 +167,7 @@ test("register step 1 is only the role choice, and Continue is blocked until a r
   assert.equal(stepLabel(), "Step 1 of 2"); assert.equal(posts().length, 0);
   // Native radios: arrow keys and Space move or pick, and nothing auto-advances or submits.
   for (const key of ["ArrowDown", "ArrowRight", " "]) {
-    await act(async () => { value("role-parent").dispatchEvent(new dom.KeyboardEvent("keydown", { key, bubbles: true })); }); await settle();
+    await act(async () => { value("role-parent").dispatchEvent(new window.KeyboardEvent("keydown", { key, bubbles: true })); }); await settle();
   }
   await act(async () => value("role-student").click()); await settle();
   assert.equal(document.getElementById("role-error")?.textContent ?? "", "");
@@ -437,7 +436,7 @@ test("legacy SDK storage is removed by key without reading credentials or touchi
 
 async function follow(label: string) {
   const link = [...document.querySelectorAll("a")].find(a => a.textContent === label); assert.ok(link);
-  await act(async () => { link.dispatchEvent(new dom.MouseEvent("click", { bubbles: true, cancelable: true })); }); await settle();
+  await act(async () => { link.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true })); }); await settle();
 }
 
 for (const destination of ["/login", "/signup"]) {

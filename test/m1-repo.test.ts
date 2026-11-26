@@ -1,9 +1,19 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
-const ROOT = "D:/PORTFOLIO/booklet-web-app/lumio-web-app";
+// Wherever this checkout lives: the main checkout, a git worktree, or CI on Linux.
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
+const PARENT = fileURLToPath(new URL("../..", import.meta.url));
+
+/** One spelling per directory: real path, forward slashes, no trailing slash, case-folded on Windows. */
+function samePath(path: string): string {
+  const real = realpathSync.native(path).replaceAll("\\", "/").replace(/\/+$/, "");
+  return process.platform === "win32" ? real.toLowerCase() : real;
+}
 
 test(".env.example lists key names and contains no secret values", () => {
   const text = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
@@ -28,19 +38,18 @@ test(".env.example lists key names and contains no secret values", () => {
 });
 
 test("lumio-web-app is its own git repo and sibling repos have no Lumio commits", () => {
-  const top = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
-  assert.equal(top.replaceAll("\\", "/").toLowerCase(), ROOT.toLowerCase());
+  const top = execFileSync("git", ["rev-parse", "--show-toplevel"], { cwd: ROOT, encoding: "utf8" }).trim();
+  assert.equal(samePath(top), samePath(ROOT));
   const tracked = execFileSync("git", ["ls-files", "--", ".env", ".env.local", ".env.example"], {
+    cwd: ROOT,
     encoding: "utf8",
   });
   assert.match(tracked, /(^|\n)\.env\.example(\n|$)/);
   assert.doesNotMatch(tracked, /(^|\n)\.env(\n|$)/);
   assert.doesNotMatch(tracked, /\.env\.local/);
 
-  const siblings = [
-    "D:/PORTFOLIO/booklet-web-app/booklet-app",
-    "D:/PORTFOLIO/booklet-web-app/grade6-reviewers",
-  ];
+  // Present beside the main checkout only. A worktree or CI run has none, so it skips them.
+  const siblings = [join(PARENT, "booklet-app"), join(PARENT, "grade6-reviewers")];
   for (const sibling of siblings) {
     if (!existsSync(sibling)) {
       continue;

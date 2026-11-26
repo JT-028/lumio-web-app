@@ -90,6 +90,8 @@ export function setViewport(width: number): void {
 
 setViewport(320);
 
+// Tests build events as `new window.Event(...)`: `window` is happy-dom at runtime
+// and lib.dom in types, so the event fits dispatchEvent() on a lib.dom element.
 export async function typeInto(input: HTMLInputElement, value: string): Promise<void> {
   const setter = Object.getOwnPropertyDescriptor(dom.HTMLInputElement.prototype, "value")?.set;
   const tracked = input as HTMLInputElement & { _valueTracker?: { setValue: (next: string) => void } };
@@ -100,6 +102,6 @@ export async function typeInto(input: HTMLInputElement, value: string): Promise<
     } else {
       input.value = value;
     }
-    input.dispatchEvent(new dom.Event("input", { bubbles: true }));
+    input.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
 }

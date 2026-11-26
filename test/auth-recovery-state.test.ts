@@ -80,6 +80,15 @@ test("upgraded context migration expires every legacy session/PKCE chunk once", 
   assert.equal(migrated.writes.size, 0);
 });
 
+test("auth responses replace a cacheable Cache-Control so nothing shares or stores them", () => {
+  const session = new AuthSession(new Request(origin));
+  const response = session.apply(new Response(null, { headers: { "Cache-Control": "public, max-age=600" } }));
+  const cache = response.headers.get("cache-control") ?? "";
+  assert.match(cache, /private/);
+  assert.match(cache, /no-store/);
+  assert.doesNotMatch(cache, /public|max-age/);
+});
+
 test("invalid staged state is cleared instead of exposed or trusted", () => {
   const session = new AuthSession(new Request(origin, { headers: { cookie: `${STATE.link}=tampered` } }));
   assert.equal(session.state("link"), null);
