@@ -67,6 +67,12 @@ Fix: Remove the robocopy step and the `working-directory` overrides, and run `np
 Resolved by the `ci:` commit on top of `2557158`. Every job runs on `ubuntu-latest` in the plain checkout, the robocopy step and both `working-directory` lines are gone, and the lint job runs `npm run typecheck:test`. Luna checked it: the YAML parses in strict mode, triggers, permissions, `needs`, pinned SHAs and the deploy job are unchanged, and `typecheck:test` exits 0.
 Unverified until the first ubuntu run: `npm ci`, `npm test` and `next build` on Linux, and Node 24.18.0 (local checks ran on Windows with Node 26.12.1).
 
+### MED (fixed). Node 24.18 gave the auth handler tests the real supabase-js
+File: `test/support/auth-provider.ts`.
+Issue: The first ubuntu run, on Node 24.18.0, failed 14 tests in `test/auth-recovery-handlers.test.ts` with 503 where 200 was expected. The Windows run at `314997b` failed the same 14, so the failures are older than this branch. `@supabase/supabase-js` maps `import` to `dist/index.mjs` and `require` to `dist/index.cjs`. tsx loads this CommonJS-typed project through `require()`. Without the nodejs/node#58231 fix, a bare-specifier `mock.module()` covers only the ESM entry, so `isolatedAuthClient()` got the real SDK. Its fetch hit the fixture's "Live network is forbidden" guard, and `src/services/auth.ts` line 57 answered `unavailable()`. `@supabase/ssr` has no `exports` map, so its bare mock already covered both loaders.
+Risk: None in production. Next bundles the SDK there, and nothing is mocked. In CI, the handler tests fail on any Node that lacks the fix.
+Fix applied: The fixture mocks the same `createClient` object a second time, under the `file:` URL of the `require()` entry. Without that line, Node 24.18.0 fails exactly those 14 tests and Node 26.12.1 passes all 60. With it, both pass 60 of 60 and `test/auth-recovery-middleware.test.ts` passes 28 of 28, so the second registration does not clash on Node 26.
+
 ### LOW (fixed). `m2-client.ts` still accepted POST and accept-only codes
 File: `src/lib/m2-client.ts`.
 Issue: After the client `acceptConnect` was removed, `request()` still took a `"GET" | "POST"` method, and nothing passes `"POST"`. Its `codes` set still listed `ROLE_NOT_STUDENT`, `EMAIL_MISMATCH` and `ALREADY_USED`. Only `POST /api/connect/:token/accept` returns those codes, and that call now goes through `authPost` in `connect-screen.tsx`. `GET /api/home` and `GET /api/connect/:token` return only `ROLE_REQUIRED`, `NOT_FOUND`, `LINK_EXPIRED` and other codes that the set already drops.
@@ -118,7 +124,7 @@ Every touched file has CRLF in the working tree and LF in the index, like the re
 - If PostgREST does not see the function, run `notify pgrst, 'reload schema';`.
 - Smoke test: one invite send returns 201 and one mail.
 - Rolling back the code alone is not enough. The old code needs `grant insert on table public.connect_invites to service_role`, and that grant brings back the count-then-insert race. Roll back both or neither.
-- CI follow-up (Dep): resolved. See the CI finding above. The first ubuntu run still has to pass.
+- CI follow-up (Dep): resolved. See the CI finding above. The first ubuntu run failed 14 auth tests on Node 24.18, fixed in the supabase-js finding. The next ubuntu run still has to pass.
 
 ## Plugin gate
 
