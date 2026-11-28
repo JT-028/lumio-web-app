@@ -47,11 +47,12 @@ Issue: The burst test in `test/m2-invites.test.ts` proves the contract with a sy
 Risk: A mistake that only real Postgres shows, such as a grant the owner lacks or a snapshot that is not fresh, would ship unseen. The function would then fail closed with 500 or let a burst past the cap.
 Fix: Before `supabase db push`, apply the migration to a local `supabase start` stack. Fire 15 parallel `rpc('create_connect_invite_capped', ...)` calls for one parent and expect exactly 10 `sent` and 5 `rate_limited`. Then confirm that `service_role` cannot insert into `connect_invites` directly. Owner: Quinn, with Dep for the stack.
 Result (28 November 2026): PASS on real Postgres.
-- Where: all four migrations were applied, in order, to a new and empty Supabase project, `dftcafuvgjbffplyezia`. It is not Production, and no local stack was used.
+- Where: the owner applied all four migrations, in order, through the SQL editor to `dftcafuvgjbffplyezia`. The owner confirmed on 29 November 2026 that this is the live Production database. It had no Lumio tables before. No local stack was used.
 - Burst: four rounds, all for one throwaway parent. Each round sent 15 parallel `rpc('create_connect_invite_capped', ...)` calls through PostgREST with the secret key.
 - Every round gave exactly 10 `sent` and 5 `rate_limited` and stored 10 rows. A 16th call returned `rate_limited`.
 - A direct `service_role` insert into `connect_invites` failed with 42501.
-- The test invite rows were deleted afterwards. Production still needs its own `supabase db push`.
+- The test invite rows were deleted afterwards. The test parent's profile and auth user `bff2bb36-f64c-424f-96bf-7a861e44137f` stay until the owner deletes them in the SQL editor, because `service_role` cannot delete profiles.
+- The migrations are live, but `supabase_migrations.schema_migrations` has no record of them. Before any `supabase db push` to this project, run `supabase migration repair --status applied 20261012120000 20261013120000 20261013140000 20261126120000`.
 
 ### LOW. Two fault guards in the capped insert have no test
 File: `src/data/invites.ts`, lines 32 to 37.
@@ -132,6 +133,7 @@ Every touched file has CRLF in the working tree and LF in the index, like the re
 
 - The migration and the code are one release. Each one breaks invites without the other. Old code with the migration fails its direct insert. New code without the migration calls an RPC that does not exist. Both cases fail closed: `POST /api/invites` answers 500 `INTERNAL`, writes no row and sends no mail. Neither order lets a parent go past the cap.
 - Order: run `supabase db push` for `20261126120000`, then promote the Vercel deploy right away, so the 500 window is as short as possible. Both steps need the owner's **ship it**.
+- Status (29 November 2026): the database step is done. The owner applied the migrations to the live project on 28 November. Until this code is promoted, Production code that still uses the direct insert cannot send invites.
 - After the push, check these privileges:
   - `has_function_privilege('service_role', 'public.create_connect_invite_capped(uuid,text,text,text)', 'execute')` is true.
   - The same check is false for `anon` and `authenticated`.
@@ -155,7 +157,7 @@ Every touched file has CRLF in the working tree and LF in the index, like the re
 ## Handoff
 
 - Ready for Quinn: yes.
-- Ready for Dep: Quinn PASS and the real-Postgres check are done. The Production `supabase db push` and the promote still need the owner's **ship it**.
+- Ready for Dep: Quinn PASS and the real-Postgres check are done. The migration is already live in Production, so the old code can no longer insert invites. Promoting this code to Production still needs the owner's **ship it**.
 
 ## Notes for Quinn
 
