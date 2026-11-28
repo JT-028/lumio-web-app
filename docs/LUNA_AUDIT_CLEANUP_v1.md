@@ -6,8 +6,8 @@ Date: 26 November 2026.
 
 ## Summary
 
-0 CRITICAL, 0 HIGH, 1 MED and 2 LOW findings are open. Luna fixed 2 more LOW findings, and a later Dep commit resolved the CI finding. The happy-dom 21.0.4 bump cleared the `npm audit` failure.
-**Overall status: PASS.** The code gate is clear. The open MED item is a check against real Postgres that nobody has run yet. It is not a defect.
+0 CRITICAL, 0 HIGH, 0 MED and 2 LOW findings are open. Luna fixed 2 more LOW findings, and a later Dep commit resolved the CI finding. The happy-dom 21.0.4 bump cleared the `npm audit` failure.
+**Overall status: PASS.** The code gate is clear. The real-Postgres burst check passed on 28 November 2026, so the MED finding is resolved.
 
 The change does five things:
 1. It replaces count-then-insert with one atomic RPC for the 10-per-hour invite cap (audit C3).
@@ -41,11 +41,17 @@ The change covers 26 paths. The 22 tracked files lose 205 lines net. The new fil
 
 ## Findings
 
-### MED. The row lock has not run against real Postgres
+### MED (resolved). The row lock had not run against real Postgres
 File: `supabase/migrations/20261126120000_connect_invites_rate_cap.sql`.
 Issue: The burst test in `test/m2-invites.test.ts` proves the contract with a synchronous in-memory fake. No test runs the migration or two real concurrent transactions. Luna also did not run the burst test against the old count-then-insert code. The claim that it fails there is reasoned: all 15 sends await the same chain, so every count runs before any insert.
 Risk: A mistake that only real Postgres shows, such as a grant the owner lacks or a snapshot that is not fresh, would ship unseen. The function would then fail closed with 500 or let a burst past the cap.
 Fix: Before `supabase db push`, apply the migration to a local `supabase start` stack. Fire 15 parallel `rpc('create_connect_invite_capped', ...)` calls for one parent and expect exactly 10 `sent` and 5 `rate_limited`. Then confirm that `service_role` cannot insert into `connect_invites` directly. Owner: Quinn, with Dep for the stack.
+Result (28 November 2026): PASS on real Postgres.
+- Where: all four migrations were applied, in order, to a new and empty Supabase project, `dftcafuvgjbffplyezia`. It is not Production, and no local stack was used.
+- Burst: four rounds, all for one throwaway parent. Each round sent 15 parallel `rpc('create_connect_invite_capped', ...)` calls through PostgREST with the secret key.
+- Every round gave exactly 10 `sent` and 5 `rate_limited` and stored 10 rows. A 16th call returned `rate_limited`.
+- A direct `service_role` insert into `connect_invites` failed with 42501.
+- The test invite rows were deleted afterwards. Production still needs its own `supabase db push`.
 
 ### LOW. Two fault guards in the capped insert have no test
 File: `src/data/invites.ts`, lines 32 to 37.
@@ -134,7 +140,7 @@ Every touched file has CRLF in the working tree and LF in the index, like the re
 - If PostgREST does not see the function, run `notify pgrst, 'reload schema';`.
 - Smoke test: one invite send returns 201 and one mail.
 - Rolling back the code alone is not enough. The old code needs `grant insert on table public.connect_invites to service_role`, and that grant brings back the count-then-insert race. Roll back both or neither.
-- CI follow-up (Dep): resolved. See the CI finding above. The first ubuntu run failed 14 auth tests on Node 24.18, fixed in the supabase-js finding. The next ubuntu run still has to pass.
+- CI follow-up (Dep): resolved. See the CI finding above. The first ubuntu run failed 14 auth tests on Node 24.18, fixed in the supabase-js finding. Ubuntu run 45850013829 on `43da253` then passed lint, test, build and security-scan.
 
 ## Plugin gate
 
@@ -149,10 +155,10 @@ Every touched file has CRLF in the working tree and LF in the index, like the re
 ## Handoff
 
 - Ready for Quinn: yes.
-- Ready for Dep: no. Dep waits for Quinn PASS, the real-Postgres check and the owner's **ship it**.
+- Ready for Dep: Quinn PASS and the real-Postgres check are done. The Production `supabase db push` and the promote still need the owner's **ship it**.
 
 ## Notes for Quinn
 
-- Run the real-Postgres burst check from the MED finding before Dep pushes the migration.
+- Done: the real-Postgres burst check from the MED finding passed on 28 November 2026.
 - Add the two malformed-RPC cases from the first LOW finding.
 - The uncovered line 12 that the report shows for `src/services/invites.ts` is a comment line. It is source-map drift, not a gap.
