@@ -47,7 +47,7 @@ mock.module("@/lib/supabase/cookie-client", {
             const token = options.getAll().find((cookie) => cookie.name === "sb-access-token")?.value;
             const user = token ? accounts.get(token) : undefined;
             if (!user) {
-              return { data: { user: null }, error: { message: "Auth session missing" } };
+              return { data: { user: null }, error: { name: "AuthSessionMissingError", message: "Auth session missing!", status: 400 } };
             }
             return { data: { user }, error: null };
           },

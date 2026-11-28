@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { usePathname } from "next/navigation";
 
-type MailFlow = { purpose: "confirmation" | "recovery"; email: string; retryAt: number };
+export type MailFlow = { purpose: "confirmation" | "recovery"; email: string; retryAt: number };
 const MailContext = createContext<{ mail: MailFlow | null; setMail: (value: MailFlow | null) => void }>({ mail: null, setMail: () => {} });
 
 // Only this mounted tree retains nonsecret send context; reload starts empty.

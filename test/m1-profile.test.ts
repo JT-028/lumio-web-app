@@ -51,7 +51,7 @@ mock.module("@/lib/supabase/cookie-client", {
             const token = options.getAll().find((cookie) => cookie.name === "sb-fixture-auth-token")?.value;
             const user = token ? accounts.get(token) : undefined;
             if (!user) {
-              return { data: { user: null }, error: { message: "Auth session missing" } };
+              return { data: { user: null }, error: { name: "AuthSessionMissingError", message: "Auth session missing!", status: 400 } };
             }
             return { data: { user }, error: null };
           },
@@ -250,12 +250,21 @@ test("an unlinked student resolves to /wait, including when the guide route does
   signIn(id, email);
   const created = await postProfile({ first_name: "Lin", role: "student" });
   assert.equal(created.status, 201);
-  const { pathAfterSignIn } = await import("../src/services/profile.ts");
-  assert.equal(await pathAfterSignIn({ id, email }), "/wait");
+  // The migration marker says this session cookie is current, not a legacy one to expire.
+  const { sealState, STATE } = await import("../src/lib/auth-state.ts");
+  cookieJar.push({ name: STATE.marker, value: sealState("marker", { migrated: true }) });
+  const { GET } = await import("../src/app/api/auth/context/route.ts");
+  const context = await GET(new Request("http://localhost:3010/api/auth/context", { headers: mutationHeaders() }));
+  assert.equal(context.status, 200);
+  const body = (await context.json()) as { authenticated: boolean; next: string | null };
+  assert.equal(body.authenticated, true);
+  assert.equal(body.next, "/wait");
   assert.equal(existsSync(new URL("../src/app/guides", import.meta.url)), false);
   assert.equal(existsSync(new URL("../content/guides", import.meta.url)), false);
+  // A string, not a literal, so the compiler does not try to resolve a route that must not exist.
+  const retiredGuideRoute: string = "../src/app/guides/[slug]/route.ts";
   await assert.rejects(
-    () => import("../src/app/guides/[slug]/route.ts"),
+    () => import(retiredGuideRoute),
     (error: NodeJS.ErrnoException) => {
       assert.ok(
         error.code === "ERR_MODULE_NOT_FOUND" || /Cannot find module/.test(error.message),

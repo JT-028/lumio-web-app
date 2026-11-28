@@ -8,10 +8,13 @@ export type ProfileRow = {
 
 export const profiles: ProfileRow[] = [];
 export const inserts: ProfileRow[] = [];
+// Controlled database fault: when set, profile reads answer with this Postgres error.
+export const dbFaults = { profileRead: null as { code: string } | null };
 
 export function resetProfiles(): void {
   profiles.length = 0;
   inserts.length = 0;
+  dbFaults.profileRead = null;
 }
 
 type View = {
@@ -69,6 +72,9 @@ export function createAdminClient() {
           return chain;
         },
         async maybeSingle() {
+          if (dbFaults.profileRead) {
+            return { data: null, error: dbFaults.profileRead };
+          }
           const found = profiles.find((row) => row.id === id) ?? null;
           return { data: found ? view(found) : null, error: null };
         },

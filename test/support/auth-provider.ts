@@ -1,5 +1,7 @@
 // Controlled SDK boundary only. Application handlers/state/security remain real.
+import { createRequire } from "node:module";
 import { mock } from "node:test";
+import { pathToFileURL } from "node:url";
 import * as ssr from "@supabase/ssr";
 import { cookieJar, cookies, rememberSetCookie, resetCookies } from "./cookies.ts";
 import { createAdminClient, resetProfiles } from "./memory-db.ts";
@@ -23,7 +25,8 @@ export const provider = {
   usedProofs: new Set<string>(),
   clientOptions: [] as Record<string, unknown>[],
   rotations: [] as Cookie[][],
-  readError: null as { code: string; status: number } | null,
+  // SDK `result.error` shape for getUser: status 0 is a network failure, a missing status is AuthUnknownError.
+  readError: null as { code?: string; status?: number; name?: string } | null,
 };
 
 type Cookie = { name: string; value: string; options?: Record<string, unknown> };
@@ -117,11 +120,16 @@ export function installProviderFixture() {
       provider.clientOptions.push(options as Record<string, unknown>); return client(options, false);
     },
   } });
-  mock.module("@supabase/supabase-js", { exports: {
+  const supabaseJs = {
     createClient(_url: string, _key: string, options: Options) {
       provider.clientOptions.push(options as Record<string, unknown>); return client(options, true);
     },
-  } });
+  };
+  mock.module("@supabase/supabase-js", { exports: supabaseJs });
+  // supabase-js is a dual package: "import" -> dist/index.mjs, "require" -> dist/index.cjs. tsx loads this
+  // CommonJS-typed project through require(). Without the nodejs/node#58231 fix (absent in 24.18, present in
+  // 26.12.1) a bare-specifier mock covers only the ESM entry, so mock the require() entry by its resolved URL too.
+  mock.module(pathToFileURL(createRequire(import.meta.url).resolve("@supabase/supabase-js")).href, { exports: supabaseJs });
 }
 
 export function resetProviderFixture() {

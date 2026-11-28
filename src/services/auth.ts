@@ -75,21 +75,23 @@ async function checkedSession(client: SupabaseClient, session: Session | null | 
   if (expected.id !== actual.id || emailKey(expected.email) !== emailKey(actual.email)) throw unavailable();
   return actual;
 }
+// Identity failures are a 4xx (not 429) provider answer; everything else (network, status 0,
+// unknown status, 429, 5xx, retryable) is transient and must never sign the user out.
+export function isTransientAuthError(error: unknown): boolean {
+  const row = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const status = row.status;
+  const identity = typeof status === "number" && status >= 400 && status < 500 && status !== 429;
+  return !identity || row.code === "unexpected_failure" || row.name === "AuthRetryableFetchError";
+}
 export async function currentIdentity(scope: AuthSession): Promise<SessionUser | null> {
-  try {
-    const client = scope.client();
-    const result = await client.auth.getUser();
-    if (result.error) {
-      const { code, status } = errorFields(result.error);
-      if (status === 429 || status >= 500 || code === "unexpected_failure") throw providerFailure(result.error);
-      scope.clearAuth(); return null;
-    }
-    if (!result.data.user) { scope.clearAuth(); return null; }
-    return verifiedIdentity(result.data.user);
-  } catch (error) {
-    scope.clearAuth();
-    throw providerFailure(error);
-  }
+  let result;
+  try { result = await scope.client().auth.getUser(); }
+  catch (error) { throw providerFailure(error); }
+  if (result.error && isTransientAuthError(result.error)) throw providerFailure(result.error);
+  let user: SessionUser | null = null;
+  if (!result.error) { try { user = verifiedIdentity(result.data.user); } catch { user = null; } }
+  if (!user) scope.clearAuth();
+  return user;
 }
 function writeIntent(scope: AuthSession, intent: Intent) {
   if (!Object.keys(intent).length) scope.clear(STATE.intent);
@@ -162,6 +164,8 @@ async function operation(scope: AuthSession, op: AuthOperation): Promise<Respons
       has_continuation: !!intent?.continuation,
       link: link ? link.purpose === "signup" ? "confirmation" : "recovery" : hadLink ? "invalid" : "none",
     };
+    // Slide the migration marker only here: migrate() ran first, so only a marker valid at request start is extended.
+    if (user) scope.set(STATE.marker, sealState("marker", { migrated: true }), TTL.marker);
     return Response.json(context, { headers: { "X-CSRF-Token": csrf } });
   }
   assertCsrf(request);

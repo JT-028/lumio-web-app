@@ -1,0 +1,7 @@
+<!-- Decorative soft cloud (Lumio). Hand-written. Use with alt="" / aria-hidden="true". -->
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="64" viewBox="0 0 120 64" fill="#FFFFFF">
+  <circle cx="36" cy="40" r="18" />
+  <circle cx="61" cy="28" r="22" />
+  <circle cx="87" cy="40" r="18" />
+  <rect x="36" y="36" width="51" height="22" />
+</svg>

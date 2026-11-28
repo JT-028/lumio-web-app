@@ -1,18 +1,14 @@
 import "server-only";
-import { countRecentInvites, deleteInvite, insertSentInvite } from "@/data/invites";
+import { deleteInvite, insertSentInviteCapped } from "@/data/invites";
 import { parseInvitedGmail } from "@/domain/email-key";
 import type { SentInviteResponse } from "@/domain/invite-response";
 import { isResendConfigured, sendConnectMail } from "@/lib/resend";
+import { resolveAppOrigin } from "@/lib/supabase/public-config";
 import { createConnectToken } from "@/lib/tokens";
 import type { ParentCaller } from "@/services/authz";
 import { AppError } from "@/services/errors";
 
-// Alex's default: expires_at is created_at plus 7 days.
-// A new send inserts a new row. It does not extend an old token.
-const CONNECT_LINK_TTL_DAYS = 7;
-const CONNECT_LINK_TTL_MS = CONNECT_LINK_TTL_DAYS * 24 * 60 * 60 * 1000;
-const HOUR_MS = 60 * 60 * 1000;
-const MAX_INVITES_PER_HOUR = 10;
+// The 7-day expiry and the 10-per-hour cap live in SQL (20261013120000, 20261126120000).
 
 const INVALID_EMAIL = "Enter a Gmail address ending in @gmail.com or @googlemail.com.";
 const EMAIL_NOT_CONFIGURED =
@@ -31,28 +27,24 @@ export async function createInvite(
   if (!isResendConfigured()) {
     throw new AppError("EMAIL_NOT_CONFIGURED", 503, EMAIL_NOT_CONFIGURED, null);
   }
-  const origin = configuredAppOrigin();
-  if (!origin) {
+  let origin: string;
+  try {
+    origin = resolveAppOrigin();
+  } catch {
     throw new AppError("INTERNAL", 500, "Something went wrong.", null);
   }
 
-  const since = new Date(Date.now() - HOUR_MS).toISOString();
-  const recent = await countRecentInvites(parent.id, since);
-  if (recent >= MAX_INVITES_PER_HOUR) {
-    throw new AppError("RATE_LIMITED", 429, RATE_LIMITED, null);
-  }
-
-  const createdAt = new Date();
-  const expiresAt = new Date(createdAt.getTime() + CONNECT_LINK_TTL_MS);
   const token = createConnectToken();
-  const stored = await insertSentInvite({
+  const outcome = await insertSentInviteCapped({
     parentId: parent.id,
     invitedEmail: invited.email,
     invitedEmailKey: invited.key,
     tokenHash: token.hash,
-    createdAt: createdAt.toISOString(),
-    expiresAt: expiresAt.toISOString(),
   });
+  if (outcome.result === "rate_limited") {
+    throw new AppError("RATE_LIMITED", 429, RATE_LIMITED, null);
+  }
+  const stored = outcome.invite;
 
   const connectUrl = `${origin}/connect/${encodeURIComponent(token.raw)}`;
   try {
@@ -80,20 +72,4 @@ export async function createInvite(
     expires_at: stored.expires_at,
     state: "sent",
   };
-}
-
-function configuredAppOrigin(): string | null {
-  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim() ?? "";
-  if (!configured) {
-    return null;
-  }
-  try {
-    const parsed = new URL(configured);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-      return null;
-    }
-    return parsed.origin;
-  } catch {
-    return null;
-  }
 }

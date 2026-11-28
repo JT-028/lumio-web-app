@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  applyAuthCacheHeaders,
   sessionCookieOptions,
   toNextCookieOptions,
 } from "../src/lib/supabase/cookie-options.ts";
@@ -33,14 +32,6 @@ test("cookie conversion preserves explicit expiry and zero-age deletion", () => 
   assert.equal(options.httpOnly, true);
 });
 
-test("auth response cache headers prevent shared or persistent storage", () => {
-  const headers = new Headers();
-  applyAuthCacheHeaders(headers, { "Cache-Control": "public, max-age=600" });
-  assert.match(headers.get("cache-control") ?? "", /private/);
-  assert.match(headers.get("cache-control") ?? "", /no-store/);
-  assert.doesNotMatch(headers.get("cache-control") ?? "", /public|max-age/);
-});
-
 test("production cannot downgrade Secure when an SDK cookie requests insecure options", () => {
   const previous = process.env.NODE_ENV;
   try {
@@ -53,7 +44,7 @@ test("production cannot downgrade Secure when an SDK cookie requests insecure op
     assert.equal(options.sameSite, "lax");
     assert.equal(options.maxAge, 604800);
   } finally {
-    if (previous === undefined) delete process.env.NODE_ENV;
+    if (previous === undefined) Reflect.deleteProperty(process.env, "NODE_ENV");
     else Object.assign(process.env, { NODE_ENV: previous });
   }
 });

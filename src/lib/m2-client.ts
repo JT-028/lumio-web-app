@@ -1,23 +1,26 @@
-import type { ConnectPreview } from "@/domain/types";
+import type { ConnectPreview, OfficialCard } from "@/domain/types";
 
 type Failure = { ok: false; status: number; code: string };
 type Result<T> = { ok: true; data: T } | Failure;
+export type HomeCard = Omit<OfficialCard, "kind">;
+export type HomeChild = {
+  id: string; // React key only; never rendered
+  first_name: string;
+  official_cards: HomeCard[];
+};
 export type HouseholdHome = {
   role: "parent" | "student";
   first_name: string;
   needs_parent: boolean;
-  children: { first_name: string }[];
+  children: HomeChild[];
 };
 
-const codes = new Set([
-  "NOT_FOUND", "LINK_EXPIRED", "ROLE_REQUIRED", "ROLE_NOT_STUDENT",
-  "EMAIL_MISMATCH", "ALREADY_USED",
-]);
+const codes = new Set(["NOT_FOUND", "LINK_EXPIRED", "ROLE_REQUIRED"]);
 
-async function request(path: string, method: "GET" | "POST"): Promise<Result<unknown>> {
+async function request(path: string): Promise<Result<unknown>> {
   try {
     const response = await fetch(path, {
-      method, credentials: "same-origin", cache: "no-store",
+      method: "GET", credentials: "same-origin", cache: "no-store",
       headers: { accept: "application/json" },
       referrerPolicy: "no-referrer",
     });
@@ -39,18 +42,36 @@ function record(value: unknown): Record<string, unknown> | null {
 }
 const malformed: Failure = { ok: false, status: 0, code: "" };
 
+// Copies only the seven listed fields; `kind` is always "official" (Aria amendment).
+function homeCard(value: unknown): HomeCard | null {
+  const card = record(value);
+  if (!card || (card.quarter !== 1 && card.quarter !== 2)) return null;
+  const { id, slug, course, course_label, quarter_label, header } = card;
+  if (typeof id !== "string" || typeof slug !== "string" || typeof course !== "string" ||
+      typeof course_label !== "string" || typeof quarter_label !== "string" ||
+      typeof header !== "string") return null;
+  return { id, slug, course, course_label, quarter: card.quarter, quarter_label, header };
+}
+
 export async function getHome(): Promise<Result<HouseholdHome>> {
-  const result = await request("/api/home", "GET");
+  const result = await request("/api/home");
   if (!result.ok) return result;
   const row = record(result.data);
   if (!row || (row.role !== "parent" && row.role !== "student") ||
       typeof row.first_name !== "string" || typeof row.needs_parent !== "boolean" ||
       !Array.isArray(row.children)) return malformed;
-  const children: { first_name: string }[] = [];
+  const children: HomeChild[] = [];
   for (const child of row.children) {
     const item = record(child);
-    if (typeof item?.first_name !== "string") return malformed;
-    children.push({ first_name: item.first_name });
+    if (typeof item?.id !== "string" || typeof item.first_name !== "string" ||
+        !Array.isArray(item.official_cards)) return malformed;
+    const cards: HomeCard[] = [];
+    for (const value of item.official_cards) {
+      const card = homeCard(value);
+      if (!card) return malformed;
+      cards.push(card);
+    }
+    children.push({ id: item.id, first_name: item.first_name, official_cards: cards });
   }
   return { ok: true, data: {
     role: row.role, first_name: row.first_name, needs_parent: row.needs_parent, children,
@@ -58,7 +79,7 @@ export async function getHome(): Promise<Result<HouseholdHome>> {
 }
 
 export async function getConnectPreview(token: string): Promise<Result<ConnectPreview>> {
-  const result = await request(`/api/connect/${encodeURIComponent(token)}`, "GET");
+  const result = await request(`/api/connect/${encodeURIComponent(token)}`);
   if (!result.ok) return result;
   const row = record(result.data);
   if (!row || typeof row.invited_email !== "string" || typeof row.parent_first_name !== "string" ||
@@ -68,13 +89,6 @@ export async function getConnectPreview(token: string): Promise<Result<ConnectPr
     invited_email: row.invited_email, parent_first_name: row.parent_first_name,
     expires_at: row.expires_at, state: row.state,
   } };
-}
-
-export async function acceptConnect(token: string): Promise<Result<"accepted" | "ignored">> {
-  const result = await request(`/api/connect/${encodeURIComponent(token)}/accept`, "POST");
-  if (!result.ok) return result;
-  const state = record(result.data)?.state;
-  return state === "accepted" || state === "ignored" ? { ok: true, data: state } : malformed;
 }
 
 export function homeRedirect(result: Result<HouseholdHome>): "/" | "/role" | null {

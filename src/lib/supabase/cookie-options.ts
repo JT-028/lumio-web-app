@@ -37,16 +37,3 @@ export function toNextCookieOptions(options: CookieOptions): NextCookieOptions {
   }
   return next;
 }
-
-export function applyAuthCacheHeaders(
-  target: Headers,
-  extra: Record<string, string>,
-): void {
-  for (const [name, value] of Object.entries(extra)) {
-    target.set(name, value);
-  }
-  const cache = target.get("Cache-Control") ?? "";
-  if (!cache.includes("no-store")) {
-    target.set("Cache-Control", "private, no-store");
-  }
-}

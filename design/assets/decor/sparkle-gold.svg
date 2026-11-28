@@ -1,0 +1,5 @@
+<!-- Decorative 4-point sparkle (Lumio gold). Hand-written. Use with alt="" / aria-hidden="true". -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+  <path fill="#EFB94E" d="M12 1c.9 6.4 4.6 10.1 11 11-6.4.9-10.1 4.6-11 11-.9-6.4-4.6-10.1-11-11 6.4-.9 10.1-4.6 11-11z" />
+  <path fill="#F8DC94" d="M11.2 5.6c.45 3.1 2.1 4.75 5.2 5.2-3.1.45-4.75 2.1-5.2 5.2-.45-3.1-2.1-4.75-5.2-5.2 3.1-.45 4.75-2.1 5.2-5.2z" />
+</svg>

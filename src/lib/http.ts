@@ -9,10 +9,6 @@ export function json(body: unknown, status: number): Response {
   return Response.json(body, { status });
 }
 
-export function noContent(): Response {
-  return new Response(null, { status: 204 });
-}
-
 export async function handleRoute(
   route: string,
   handler: (ctx: RouteContext) => Promise<Response>,

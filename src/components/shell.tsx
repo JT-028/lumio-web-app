@@ -2,49 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { authPost } from "@/lib/auth-client";
-
-function useDisplayFont() {
-  useEffect(() => {
-    const root = document.documentElement;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      root.classList.add("fonts-ready");
-      return;
-    }
-    let finished = false;
-    const show = () => {
-      if (finished) {
-        return;
-      }
-      finished = true;
-      root.classList.add("fonts-ready");
-    };
-    const timer = window.setTimeout(show, 2500);
-    const fonts = document.fonts;
-    if (!fonts) {
-      show();
-      return () => window.clearTimeout(timer);
-    }
-    void fonts.ready.then(() => {
-      window.requestAnimationFrame(() => {
-        void fonts.ready.then(show);
-      });
-    });
-    return () => window.clearTimeout(timer);
-  }, []);
-}
-
-export function Lines({ count }: { count: number }) {
-  return (
-    <div className="skeleton" aria-hidden="true">
-      {Array.from({ length: count }, (_, index) => (
-        <span
-          key={index}
-          className={index === count - 1 ? "skeleton-line short" : "skeleton-line"}
-        />
-      ))}
-    </div>
-  );
-}
+import { FocusFrame } from "@/components/frame";
+import { SignOutIcon } from "@/components/icons";
+import { StatusLine } from "@/components/ui";
 
 export function useSignOut() {
   const [signOutError, setSignOutError] = useState("");
@@ -74,46 +34,39 @@ export function useSignOut() {
   return { signOutError, signingOut, onSignOut };
 }
 
+/** Sign out control plus its status line, shared by every signed-in frame. */
+export function SignOut({ state, className, statusClassName }: {
+  state: ReturnType<typeof useSignOut>;
+  className: string;
+  statusClassName: string;
+}) {
+  const { signOutError, signingOut, onSignOut } = state;
+  return (
+    <>
+      <button type="button" className={`button-secondary ${className}`} disabled={signingOut} onClick={() => { void onSignOut(); }}>
+        <SignOutIcon />Sign out
+      </button>
+      <StatusLine tone="error" className={statusClassName}>{signOutError}</StatusLine>
+    </>
+  );
+}
+
+/** FocusShell: /role, /wait, /connect and their gate states. */
 export function Shell({
   signedIn,
   busy = false,
+  center = false,
   children,
 }: {
   signedIn: boolean;
   busy?: boolean;
+  center?: boolean;
   children: React.ReactNode;
 }) {
-  useDisplayFont();
-  const { signOutError, signingOut, onSignOut } = useSignOut();
-
+  const signOut = useSignOut();
   return (
-    <div className="shell">
-      <header className="chrome">
-        <p className="wordmark display-text">Lumio</p>
-        <p className="tagline">
-          Learn. Grow. <span className="level-up">Level Up.</span>
-        </p>
-        {signedIn ? (
-          <button
-            type="button"
-            className="button-quiet"
-            onClick={() => {
-              void onSignOut();
-            }}
-            disabled={signingOut}
-          >
-            Sign out
-          </button>
-        ) : null}
-        {signedIn ? (
-          <p className="status is-error" aria-live="polite">
-            {signOutError}
-          </p>
-        ) : null}
-      </header>
-      <main className="action" aria-busy={busy}>
-        {children}
-      </main>
-    </div>
+    <FocusFrame busy={busy} center={center} actions={signedIn ? <SignOut state={signOut} className="focus-sign-out" statusClassName="topbar-status" /> : null}>
+      {children}
+    </FocusFrame>
   );
 }

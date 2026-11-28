@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { authPost, authMessage } from "@/lib/auth-client";
+import { StatusLine } from "@/components/ui";
 
 export function ConnectAuth({ token, allowCreate, switchAccount = false }: {
   token: string;
@@ -40,11 +41,13 @@ export function ConnectAuth({ token, allowCreate, switchAccount = false }: {
   }
 
   return <div className="stack" aria-busy={pending}>
-    {switchAccount ? <a href="/login" aria-disabled={pending} onClick={event => void enter(event, "/login")}>Sign out and switch account</a> : <>
-      <p>Sign in with the invited email to review this invitation. Connecting still requires your acceptance.</p>
-      <a className="button-primary recovery-link" href="/login" aria-disabled={pending} onClick={event => void enter(event, "/login")}>Sign in</a>
-      {allowCreate ? <a className="button-quiet recovery-link" href="/signup" aria-disabled={pending} onClick={event => void enter(event, "/signup")}>Create account</a> : null}
+    {switchAccount ? <a className="button-quiet" href="/login" aria-disabled={pending} onClick={event => void enter(event, "/login")}>Sign out and switch account</a> : <>
+      <p>Sign in with the invited email to see this invitation. Nothing connects until you accept it.</p>
+      <div className="actions">
+        <a className="button-primary" href="/login" aria-disabled={pending} onClick={event => void enter(event, "/login")}>Sign in</a>
+        {allowCreate ? <a className="button-secondary" href="/signup" aria-disabled={pending} onClick={event => void enter(event, "/signup")}>Create account</a> : null}
+      </div>
     </>}
-    <p ref={statusRef} className={status ? "status is-error" : "status"} role={status ? "alert" : "status"} tabIndex={-1}>{pending ? "Opening sign-in…" : status}</p>
+    <StatusLine ref={statusRef} tone={status ? "error" : "info"} role={status ? "alert" : "status"} focusable>{pending ? "Opening sign-in…" : status}</StatusLine>
   </div>;
 }

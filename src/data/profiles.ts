@@ -103,9 +103,9 @@ function parseProfile(data: unknown): ProfileRecord {
   if (firstName !== null && typeof firstName !== "string") {
     throw new AppError("INTERNAL", 500, "Something went wrong.", null);
   }
-  // Chosen roles require names in SQL. Nullable placeholder rows are SQL-valid,
-  // but cannot be completed through the insert-only, immutable-role contract.
-  if (role === null || !parseFirstName(firstName).ok) {
+  // Null-role rows are SQL-valid and read as no role chosen. The app never completes them:
+  // profiles are insert-only, there is no UPDATE grant, and the role is immutable.
+  if (role !== null && !parseFirstName(firstName).ok) {
     throw new InvalidProfileError();
   }
   return {

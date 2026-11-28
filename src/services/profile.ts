@@ -86,17 +86,6 @@ export async function createProfile(
   }
 }
 
-export async function pathAfterSignIn(user: SessionUser): Promise<string> {
-  const profile = await findProfileById(user.id);
-  if (!profile || profile.role === null) {
-    return "/role";
-  }
-  if (profile.role === "student") {
-    return (await linkedStudent(profile)) ? "/home" : "/wait";
-  }
-  return "/home";
-}
-
 export async function readJsonObject(request: Request): Promise<Record<string, unknown>> {
   let text: string;
   try {

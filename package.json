@@ -7,12 +7,13 @@
     "build": "next build",
     "start": "next start --port 3010",
     "typecheck": "tsc --noEmit",
-    "test": "set TSX_TSCONFIG_PATH=test/tsconfig.json&& node --experimental-test-module-mocks --test-isolation=process --import tsx --test --test-concurrency=1 --experimental-test-coverage --test-coverage-include=src/**/*.ts --test-coverage-include=src/**/*.tsx \"test/**/*.test.ts\" \"test/**/*.test.tsx\""
+    "typecheck:test": "tsc --noEmit -p test/tsconfig.json",
+    "test": "node --env-file=test/tsx.env --experimental-test-module-mocks --test-isolation=process --import tsx --test --test-concurrency=1 --experimental-test-coverage \"--test-coverage-include=src/**/*.ts\" \"--test-coverage-include=src/**/*.tsx\" \"test/**/*.test.ts\" \"test/**/*.test.tsx\""
   },
   "dependencies": {
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.3",
-    "next": "15.5.28",
+    "next": "15.5.29",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "0.0.1"
@@ -21,7 +22,7 @@
     "@types/node": "22.19.15",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
-    "happy-dom": "20.10.6",
+    "happy-dom": "21.0.4",
     "tsx": "4.23.15",
     "typescript": "5.9.3"
   },

@@ -24,7 +24,7 @@ test("same-origin JSON mutations with matching CSRF cookie/header pass", () => {
   assert.doesNotThrow(() => assertCsrf(mutation()));
 });
 
-for (const [label, headers] of Object.entries({
+for (const [label, headers] of Object.entries<Record<string, string | null>>({
   "missing origin": { origin: null },
   "foreign origin": { origin: "https://attacker.example.test" },
   "null origin": { origin: "null" },
